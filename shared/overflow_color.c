@@ -42,7 +42,7 @@ OverflowColorPileData CreateOverflowColorPile( b3WorldId worldId )
 
 		b3BoxHull box = b3MakeBoxHull( hubHalfX, hubHalfY, hubHalfZ );
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 50.0f;
+		shapeDef.baseMaterial.density = 50.0f;
 		b3CreateHullShape( data.hubId, &shapeDef, &box.base );
 	}
 

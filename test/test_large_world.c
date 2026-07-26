@@ -44,7 +44,7 @@ static StackResult RunStack( float baseX )
 
 		b3BoxHull box = b3MakeCubeHull( 0.5f );
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 		b3CreateHullShape( bodies[i], &shapeDef, &box.base );
 	}
 
@@ -122,7 +122,7 @@ static float RunBullet( float baseX )
 	b3BodyId bulletId = b3CreateBody( worldId, &bulletDef );
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.1f };
 	b3ShapeDef bulletShapeDef = b3DefaultShapeDef();
-	bulletShapeDef.density = 1.0f;
+	bulletShapeDef.baseMaterial.density = 1.0f;
 	b3CreateSphereShape( bulletId, &bulletShapeDef, &sphere );
 
 	for ( int step = 0; step < 30; ++step )

@@ -122,7 +122,7 @@ public:
 				m_bodyId = bodyId;
 			}
 
-			// shapeDef.density = 1.0f + 4.0f * i;
+			// shapeDef.baseMaterial.density = 1.0f + 4.0f * i;
 			b3CreateSphereShape( bodyId, &shapeDef, &sphere );
 
 			y += 3.0f * r;
@@ -695,7 +695,7 @@ public:
 		const float halfDepth = 0.5f;
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 200.0f;
+		shapeDef.baseMaterial.density = 200.0f;
 
 		b3BodyDef bodyDef = b3DefaultBodyDef();
 		bodyDef.type = b3_dynamicBody;
@@ -774,7 +774,7 @@ public:
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
 		shapeDef.baseMaterial.friction = 0.6f;
-		shapeDef.density = 4.0f;
+		shapeDef.baseMaterial.density = 4.0f;
 
 		b3BodyDef bodyDef = b3DefaultBodyDef();
 		bodyDef.type = b3_dynamicBody;

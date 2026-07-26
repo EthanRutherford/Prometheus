@@ -566,7 +566,7 @@ public:
 			// shapeDef.baseMaterial.customColor = b3_colorLimeGreen;
 
 			float volume = 8.0f * m_bodyHalfWidth * m_bodyHalfHeight * m_bodyHalfWidth;
-			shapeDef.density = m_characterMass / volume;
+			shapeDef.baseMaterial.density = m_characterMass / volume;
 			shapeDef.enableSpeculativeContact = false;
 
 			b3BoxHull box = b3MakeBoxHull( m_bodyHalfWidth, m_bodyHalfHeight, m_bodyHalfWidth );

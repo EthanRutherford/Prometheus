@@ -28,7 +28,7 @@ static b3MassData SphereBodyMass( const b3Vec3* centers, int count, float radius
 	b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = density;
+	shapeDef.baseMaterial.density = density;
 
 	for ( int i = 0; i < count; ++i )
 	{
@@ -134,7 +134,7 @@ static int DeferredMassExtents( void )
 	bodyDef.type = b3_dynamicBody;
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.updateBodyMass = false;
 
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };

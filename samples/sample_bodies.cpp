@@ -34,7 +34,7 @@ public:
 
 			b3BoxHull box = b3MakeBoxHull( 0.5f, 2.0f, 0.5f );
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 1.0f;
+			shapeDef.baseMaterial.density = 1.0f;
 			b3CreateHullShape( m_attachmentId, &shapeDef, &box.base );
 		}
 
@@ -49,7 +49,7 @@ public:
 
 			b3BoxHull box = b3MakeBoxHull( 0.5f, 2.0f, 0.5f );
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 1.0f;
+			shapeDef.baseMaterial.density = 1.0f;
 			b3CreateHullShape( m_secondAttachmentId, &shapeDef, &box.base );
 		}
 
@@ -66,7 +66,7 @@ public:
 				0.5f, 4.0f, 0.5f, { { 4.0f, 0.0f, 0.0f }, b3MakeQuatFromAxisAngle( b3Vec3_axisZ, 0.5f * B3_PI ) } );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 2.0f;
+			shapeDef.baseMaterial.density = 2.0f;
 			b3CreateHullShape( m_platformId, &shapeDef, &box.base );
 
 			b3RevoluteJointDef revoluteDef = b3DefaultRevoluteJointDef();
@@ -117,7 +117,7 @@ public:
 			b3BoxHull box = b3MakeBoxHull( 0.75f, 0.75f, 0.75f );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 2.0f;
+			shapeDef.baseMaterial.density = 2.0f;
 
 			b3CreateHullShape( bodyId, &shapeDef, &box.base );
 		}
@@ -134,7 +134,7 @@ public:
 			b3BoxHull box = b3MakeBoxHull( 0.75f, 0.75f, 0.75f );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 2.0f;
+			shapeDef.baseMaterial.density = 2.0f;
 
 			b3CreateHullShape( m_secondPayloadId, &shapeDef, &box.base );
 		}
@@ -151,7 +151,7 @@ public:
 			b3Capsule capsule = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, 0.25f };
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 2.0f;
+			shapeDef.baseMaterial.density = 2.0f;
 
 			b3CreateCapsuleShape( m_touchingBodyId, &shapeDef, &capsule );
 		}
@@ -169,7 +169,7 @@ public:
 			b3Sphere sphere = { { 0.0f, 0.5f, 0.0f }, 0.25f };
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 2.0f;
+			shapeDef.baseMaterial.density = 2.0f;
 
 			b3CreateSphereShape( m_floatingBodyId, &shapeDef, &sphere );
 		}
@@ -1211,7 +1211,7 @@ public:
 		b3BodyId bodyId = b3CreateBody( m_worldId, &bodyDef );
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 
 		// Band built from a loop of capsules.
 		b3Vec3 vertices[n];
@@ -1234,7 +1234,7 @@ public:
 		}
 
 		// Heavy gem provides the mass asymmetry that drives the inversion
-		shapeDef.density = 2.0f;
+		shapeDef.baseMaterial.density = 2.0f;
 		b3Sphere sphere = { .center = { 0.0f, -0.65f * r, 0.0f }, .radius = 0.3f };
 		b3CreateSphereShape( bodyId, &shapeDef, &sphere );
 

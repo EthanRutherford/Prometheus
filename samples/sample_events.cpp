@@ -372,7 +372,7 @@ public:
 		float torqueThreshold = 10000.0f;
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 
 		// distance joint
 		{
@@ -599,7 +599,7 @@ public:
 			b3BodyId bodyId = b3CreateBody( m_worldId, &bodyDef );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 20.0f;
+			shapeDef.baseMaterial.density = 20.0f;
 			shapeDef.enableContactEvents = true;
 			shapeDef.baseMaterial.rollingResistance = 0.01f;
 			b3Sphere sphere = { b3Vec3_zero, 0.5f };

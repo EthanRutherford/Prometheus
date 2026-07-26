@@ -58,7 +58,7 @@ int HelloWorld( void )
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
 
 	// Set the box density to be non-zero, so it will be dynamic.
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 
 	// Override the default friction.
 	shapeDef.baseMaterial.friction = 0.3f;
@@ -415,7 +415,7 @@ static int TestContactEvents( void )
 	bodyDef.position = (b3Pos){ 0.0f, 5.0f, 0.0f };
 	b3BodyId sphereBodyId = b3CreateBody( worldId, &bodyDef );
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.enableContactEvents = true;
 	shapeDef.baseMaterial.restitution = 0.6f;
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
@@ -479,7 +479,7 @@ static int TestHitEvents( void )
 	bodyDef.linearVelocity = (b3Vec3){ 0.0f, -30.0f, 0.0f };
 	b3BodyId sphereBodyId = b3CreateBody( worldId, &bodyDef );
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.enableHitEvents = true;
 	shapeDef.baseMaterial.userMaterialId = 7;
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
@@ -580,7 +580,7 @@ static int TestCompoundHitEvents( void )
 		bodyDef.linearVelocity = (b3Vec3){ 0.0f, -30.0f, 0.0f };
 		b3BodyId sphereBodyId = b3CreateBody( worldId, &bodyDef );
 		b3ShapeDef sphereShapeDef = b3DefaultShapeDef();
-		sphereShapeDef.density = 1.0f;
+		sphereShapeDef.baseMaterial.density = 1.0f;
 		sphereShapeDef.enableHitEvents = true;
 		sphereShapeDef.baseMaterial.userMaterialId = kSphereMaterial;
 		b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
@@ -726,7 +726,7 @@ static int TestCompoundContactMaterials( void )
 		bodyDef.linearVelocity = (b3Vec3){ 0.0f, -30.0f, 0.0f };
 		b3BodyId sphereBodyId = b3CreateBody( worldId, &bodyDef );
 		b3ShapeDef sphereShapeDef = b3DefaultShapeDef();
-		sphereShapeDef.density = 1.0f;
+		sphereShapeDef.baseMaterial.density = 1.0f;
 		sphereShapeDef.baseMaterial.friction = 1.0f;
 		sphereShapeDef.baseMaterial.userMaterialId = kProbeMaterialId;
 		b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
@@ -1111,7 +1111,7 @@ static int TestContinuousMoveEvent( void )
 	bodyDef.linearVelocity = (b3Vec3){ -30.0f, 0.0f, 0.0f };
 	b3BodyId ballId = b3CreateBody( worldId, &bodyDef );
 	shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.25f };
 	b3CreateSphereShape( ballId, &shapeDef, &sphere );
 

@@ -32,7 +32,6 @@ typedef struct b3Shape
 	int sensorIndex;
 	int proxyKey;
 	b3ShapeType type;
-	float density;
 	float explosionScale;
 	float aabbMargin;
 

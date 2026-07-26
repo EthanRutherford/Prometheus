@@ -51,7 +51,7 @@ static int SphereRoundTrip( void )
 	sphere.center = (b3Vec3){ 0.0f, 0.0f, 0.0f };
 	sphere.radius = 0.5f;
 	b3ShapeDef sphereDef = b3DefaultShapeDef();
-	sphereDef.density = 1.0f;
+	sphereDef.baseMaterial.density = 1.0f;
 	b3CreateSphereShape( bodyId, &sphereDef, &sphere );
 
 	float timeStep = 1.0f / 60.0f;
@@ -90,7 +90,7 @@ static int HullDedup( void )
 	b3World_StartRecording( worldId, rec );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 
 	for ( int i = 0; i < 3; ++i )
 	{
@@ -145,7 +145,7 @@ static int MidStreamNoContacts( void )
 	sphere.center = (b3Vec3){ 0.0f, 0.0f, 0.0f };
 	sphere.radius = 0.5f;
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 
 	// A few dynamic bodies well apart from each other so no contacts form
 	for ( int i = 0; i < 4; ++i )
@@ -203,7 +203,7 @@ static int MidStreamContacts( void )
 	}
 
 	b3ShapeDef dynamicShape = b3DefaultShapeDef();
-	dynamicShape.density = 1.0f;
+	dynamicShape.baseMaterial.density = 1.0f;
 
 	// A few dynamic boxes dropped onto the ground
 	for ( int i = 0; i < 3; ++i )
@@ -272,7 +272,7 @@ static int ScrubBackward( void )
 
 	// A small stack of dynamic hull boxes
 	b3ShapeDef boxShape = b3DefaultShapeDef();
-	boxShape.density = 1.0f;
+	boxShape.baseMaterial.density = 1.0f;
 	for ( int i = 0; i < 4; ++i )
 	{
 		b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
@@ -378,7 +378,7 @@ static int SeekWithHull( void )
 
 	// Dynamic bodies using the custom hull
 	b3ShapeDef sd = b3DefaultShapeDef();
-	sd.density = 1.0f;
+	sd.baseMaterial.density = 1.0f;
 	for ( int i = 0; i < 3; ++i )
 	{
 		b3BodyDef bd = b3DefaultBodyDef();
@@ -493,7 +493,7 @@ static int DebugShapeCallbacks( void )
 	// Four dynamic boxes sharing one hull: ground + 4 boxes = 5 shapes total.
 	b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
 	b3ShapeDef boxShape = b3DefaultShapeDef();
-	boxShape.density = 1.0f;
+	boxShape.baseMaterial.density = 1.0f;
 	for ( int i = 0; i < 4; ++i )
 	{
 		b3BodyDef bodyDef = b3DefaultBodyDef();
@@ -572,7 +572,7 @@ static int PlayerAccessors( void )
 	// Four dynamic boxes (ordinals 1..4)
 	const int dynamicCount = 4;
 	b3ShapeDef boxShape = b3DefaultShapeDef();
-	boxShape.density = 1.0f;
+	boxShape.baseMaterial.density = 1.0f;
 	for ( int i = 0; i < dynamicCount; ++i )
 	{
 		b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
@@ -673,7 +673,7 @@ static int KeyframeHandleReuse( void )
 	const int dynamicCount = 5;
 	b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
 	b3ShapeDef boxShape = b3DefaultShapeDef();
-	boxShape.density = 1.0f;
+	boxShape.baseMaterial.density = 1.0f;
 	for ( int i = 0; i < dynamicCount; ++i )
 	{
 		b3BodyDef bodyDef = b3DefaultBodyDef();
@@ -798,7 +798,7 @@ static int QueryReplay( void )
 		b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
 		b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
 		b3ShapeDef sphereDef = b3DefaultShapeDef();
-		sphereDef.density = 1.0f;
+		sphereDef.baseMaterial.density = 1.0f;
 		b3CreateSphereShape( bodyId, &sphereDef, &sphere );
 	}
 
@@ -1045,7 +1045,7 @@ static int AllOps( void )
 	ENSURE( b3Body_IsValid( bodyId ) );
 
 	b3ShapeDef sphereShapeDef = b3DefaultShapeDef();
-	sphereShapeDef.density = 1.0f;
+	sphereShapeDef.baseMaterial.density = 1.0f;
 	// Over-length shape name so replay exercises the clamp in the shape def reader, like the body above.
 	sphereShapeDef.name = "sphereNameThatExceedsTheLimit";
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
@@ -1060,7 +1060,7 @@ static int AllOps( void )
 	ENSURE( b3Body_IsValid( capsuleBodyId ) );
 
 	b3ShapeDef capsuleShapeDef = b3DefaultShapeDef();
-	capsuleShapeDef.density = 1.0f;
+	capsuleShapeDef.baseMaterial.density = 1.0f;
 	b3Capsule capsule = { { 0.0f, -0.4f, 0.0f }, { 0.0f, 0.4f, 0.0f }, 0.25f };
 	b3ShapeId capsuleShapeId = b3CreateCapsuleShape( capsuleBodyId, &capsuleShapeDef, &capsule );
 	ENSURE( b3Shape_IsValid( capsuleShapeId ) );
@@ -1080,7 +1080,7 @@ static int AllOps( void )
 	ENSURE( b3Body_IsValid( hullBodyId ) );
 
 	b3ShapeDef hullShapeDef = b3DefaultShapeDef();
-	hullShapeDef.density = 1.0f;
+	hullShapeDef.baseMaterial.density = 1.0f;
 	b3ShapeId hullShapeId = b3CreateHullShape( hullBodyId, &hullShapeDef, customHull );
 	ENSURE( b3Shape_IsValid( hullShapeId ) );
 
@@ -1092,7 +1092,7 @@ static int AllOps( void )
 	ENSURE( b3Body_IsValid( boxBodyId ) );
 
 	b3ShapeDef boxShapeDef = b3DefaultShapeDef();
-	boxShapeDef.density = 2.0f;
+	boxShapeDef.baseMaterial.density = 2.0f;
 	b3BoxHull boxHull = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
 	b3ShapeId boxShapeId = b3CreateHullShape( boxBodyId, &boxShapeDef, &boxHull.base );
 	ENSURE( b3Shape_IsValid( boxShapeId ) );
@@ -1104,7 +1104,7 @@ static int AllOps( void )
 	b3BodyId xformBodyId = b3CreateBody( worldId, &xformBodyDef );
 	ENSURE( b3Body_IsValid( xformBodyId ) );
 	b3ShapeDef xformShapeDef = b3DefaultShapeDef();
-	xformShapeDef.density = 1.0f;
+	xformShapeDef.baseMaterial.density = 1.0f;
 	b3Transform xformXf = { (b3Vec3){ 0.1f, 0.2f, -0.1f }, b3MakeQuatFromAxisAngle( (b3Vec3){ 0.0f, 1.0f, 0.0f }, 0.4f ) };
 	b3ShapeId xformShapeId =
 		b3CreateTransformedHullShape( xformBodyId, &xformShapeDef, customHull, xformXf, (b3Vec3){ 1.25f, 0.75f, 1.5f } );
@@ -1253,7 +1253,7 @@ static int AllOps( void )
 		jb[i] = b3CreateBody( worldId, &jbd );
 		b3Sphere js = { { 0.0f, 0.0f, 0.0f }, 0.25f };
 		b3ShapeDef jsd = b3DefaultShapeDef();
-		jsd.density = 1.0f;
+		jsd.baseMaterial.density = 1.0f;
 		b3CreateSphereShape( jb[i], &jsd, &js );
 	}
 
@@ -1558,7 +1558,7 @@ static int TransformedHullRoundTrip( void )
 	b3World_StartRecording( worldId, rec );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 
 	// Baked transform with a rotation and non-uniform scale, the path Unreal uses for instanced hulls.
 	b3Transform xf = { (b3Vec3){ 0.25f, 0.0f, -0.5f }, b3MakeQuatFromAxisAngle( (b3Vec3){ 0.0f, 0.0f, 1.0f }, 0.3f ) };
@@ -1620,7 +1620,7 @@ static int ReservedHeaderBytes( void )
 	b3BodyId bodyId = b3CreateBody( worldId, &bd );
 	b3Sphere s = { { 0.0f, 0.0f, 0.0f }, 0.5f };
 	b3ShapeDef sd = b3DefaultShapeDef();
-	sd.density = 1.0f;
+	sd.baseMaterial.density = 1.0f;
 	b3CreateSphereShape( bodyId, &sd, &s );
 
 	for ( int i = 0; i < 10; ++i )
@@ -1769,7 +1769,7 @@ static int StagedStepCreationPose( void )
 
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	b3CreateSphereShape( bodyId, &shapeDef, &sphere );
 
 	// Impulse along +x so the first integrated step moves the body a visible distance off the spawn.
@@ -1882,7 +1882,7 @@ static int ShapeNameReplay( void )
 		b3BodyId body = b3CreateBody( worldId, &bd );
 
 		b3ShapeDef sd = b3DefaultShapeDef();
-		sd.density = 1.0f;
+		sd.baseMaterial.density = 1.0f;
 		if ( i != 1 )
 		{
 			sd.name = names[i];
@@ -1972,7 +1972,7 @@ static uint64_t RunGeometryMutatorScene( b3Recording* rec, bool mutate, const b3
 
 	b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
 	b3ShapeDef boxShapeDef = b3DefaultShapeDef();
-	boxShapeDef.density = 1.0f;
+	boxShapeDef.baseMaterial.density = 1.0f;
 	b3ShapeId boxShapeId = b3CreateHullShape( boxBodyId, &boxShapeDef, &box.base );
 
 	float timeStep = 1.0f / 60.0f;

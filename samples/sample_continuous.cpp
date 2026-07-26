@@ -244,7 +244,7 @@ public:
 		m_bulletId = b3CreateBody( m_worldId, &bodyDef );
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density *= 10.0f;
+		shapeDef.baseMaterial.density *= 10.0f;
 		b3Sphere sphere = { b3Vec3_zero, 0.25f };
 		b3CreateSphereShape( m_bulletId, &shapeDef, &sphere );
 	}

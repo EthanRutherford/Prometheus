@@ -118,7 +118,7 @@ void CreateLargePyramid( b3WorldId worldId )
 	bodyDef.type = b3_dynamicBody;
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 100.0f;
+	shapeDef.baseMaterial.density = 100.0f;
 
 	float h = 0.5f;
 	b3BoxHull box = b3MakeBoxHull( h, h, h );
@@ -190,7 +190,7 @@ static void CreateSmallPyramid( b3WorldId worldId, int baseCount, float extent, 
 	bodyDef.enableSleep = false;
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 100.0f;
+	shapeDef.baseMaterial.density = 100.0f;
 
 	b3BoxHull box = b3MakeBoxHull( extent, extent, extent );
 
@@ -711,7 +711,7 @@ static void CreateTrees( b3WorldId worldId, int scale )
 	shapeDef.baseMaterial.friction = 0.9f;
 	shapeDef.baseMaterial.rollingResistance = 0.05f;
 	shapeDef.updateBodyMass = false;
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 
 	int hullCount = 22;
 	b3HullData* hulls[22] = { 0 };

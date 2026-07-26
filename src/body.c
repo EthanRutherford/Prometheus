@@ -840,7 +840,7 @@ void b3UpdateBodyMassData( b3World* world, b3Body* body )
 		const b3Shape* s = b3Array_Get( world->shapes, shapeId );
 		shapeId = s->nextShapeId;
 
-		if ( s->density == 0.0f )
+		if ( s->material.density == 0.0f )
 		{
 			masses[shapeIndex] = (b3MassData){ 0 };
 			shapeIndex += 1;

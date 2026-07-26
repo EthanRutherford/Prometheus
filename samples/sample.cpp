@@ -1256,7 +1256,7 @@ void Sample::MouseDown( b3Vec2 p, int button, int modifiers )
 			b3BodyId bodyId = b3CreateBody( m_worldId, &bodyDef );
 
 			b3Sphere sphere = { b3Vec3_zero, 0.25f };
-			shapeDef.density *= 4.0f;
+			shapeDef.baseMaterial.density *= 4.0f;
 			b3CreateSphereShape( bodyId, &shapeDef, &sphere );
 		}
 	}

@@ -84,7 +84,7 @@ static void BuildNamedScene( b3WorldId worldId )
 	b3CreateHullShape( groundId, &groundShape, &groundBox.base );
 
 	b3ShapeDef boxShape = b3DefaultShapeDef();
-	boxShape.density = 1.0f;
+	boxShape.baseMaterial.density = 1.0f;
 	for ( int i = 0; i < ARRAY_COUNT( s_bodyNames ); ++i )
 	{
 		b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );

@@ -152,11 +152,9 @@ static b3Shape* b3CreateShapeInternal( b3World* world, b3Body* body, b3WorldTran
 			break;
 
 		case b3_meshShape:
-		{
 			shape->mesh.data = (b3MeshData*)geometry;
 			shape->mesh.scale = b3SafeScale( scale );
-		}
-		break;
+			break;
 
 		case b3_heightShape:
 			shape->heightField = (b3HeightFieldData*)geometry;
@@ -170,7 +168,6 @@ static b3Shape* b3CreateShapeInternal( b3World* world, b3Body* body, b3WorldTran
 	shape->id = shapeId;
 	shape->bodyId = body->id;
 	shape->type = shapeType;
-	shape->density = def->density;
 	shape->explosionScale = def->explosionScale;
 	shape->filter = def->filter;
 	shape->userData = def->userData;
@@ -256,9 +253,9 @@ static b3ShapeId b3CreateShape( b3BodyId bodyId, const b3ShapeDef* def, const vo
 								b3Transform transform, b3Vec3 scale, bool haveTransform )
 {
 	B3_CHECK_DEF( def );
-	B3_ASSERT( b3IsValidFloat( def->density ) && def->density >= 0.0f );
 	B3_ASSERT( b3IsValidFloat( def->baseMaterial.friction ) && def->baseMaterial.friction >= 0.0f );
 	B3_ASSERT( b3IsValidFloat( def->baseMaterial.restitution ) && def->baseMaterial.restitution >= 0.0f );
+	B3_ASSERT( b3IsValidFloat( def->baseMaterial.density ) && def->baseMaterial.density >= 0.0f );
 
 	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
 	if ( world == NULL )
@@ -716,13 +713,13 @@ b3MassData b3ComputeShapeMass( const b3Shape* shape )
 	switch ( shape->type )
 	{
 		case b3_capsuleShape:
-			return b3ComputeCapsuleMass( &shape->capsule, shape->density );
+			return b3ComputeCapsuleMass( &shape->capsule, shape->material.density );
 
 		case b3_hullShape:
-			return b3ComputeHullMass( shape->hull, shape->density );
+			return b3ComputeHullMass( shape->hull, shape->material.density );
 
 		case b3_sphereShape:
-			return b3ComputeSphereMass( &shape->sphere, shape->density );
+			return b3ComputeSphereMass( &shape->sphere, shape->material.density );
 
 		default:
 			return (b3MassData){ 0 };
@@ -1199,13 +1196,13 @@ void b3Shape_SetDensity( b3ShapeId shapeId, float density, bool updateBodyMass )
 	B3_REC( world, ShapeSetDensity, shapeId, density, updateBodyMass );
 
 	b3Shape* shape = b3GetShape( world, shapeId );
-	if ( density == shape->density )
+	if ( density == shape->material.density )
 	{
 		// early return to avoid expensive function
 		return;
 	}
 
-	shape->density = density;
+	shape->material.density = density;
 
 	if ( updateBodyMass == true )
 	{
@@ -1218,7 +1215,7 @@ float b3Shape_GetDensity( b3ShapeId shapeId )
 {
 	b3World* world = b3GetWorld( shapeId.world0 );
 	b3Shape* shape = b3GetShape( world, shapeId );
-	return shape->density;
+	return shape->material.density;
 }
 
 void b3Shape_SetFriction( b3ShapeId shapeId, float friction )

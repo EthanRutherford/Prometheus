@@ -72,7 +72,7 @@ public:
 		b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, radius };
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 20.0f;
+		shapeDef.baseMaterial.density = 20.0f;
 
 		float yOffset = 20.0f;
 
@@ -744,7 +744,7 @@ public:
 		m_bodyId = b3CreateBody( m_worldId, &bodyDef );
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 100.0f;
+		shapeDef.baseMaterial.density = 100.0f;
 
 		b3BoxHull box = b3MakeBoxHull( 0.5f, 1.5f, 0.25f );
 		b3CreateHullShape( m_bodyId, &shapeDef, &box.base );
@@ -1622,7 +1622,7 @@ public:
 			m_doorId = b3CreateBody( m_worldId, &bodyDef );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 1000.0f;
+			shapeDef.baseMaterial.density = 1000.0f;
 
 			b3BoxHull box = b3MakeBoxHull( 0.75f, 1.5f, 0.1f );
 			b3CreateHullShape( m_doorId, &shapeDef, &box.base );
@@ -1856,7 +1856,7 @@ public:
 			b3BoxHull box = b3MakeBoxHull( a, 0.125f, 0.5f );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 20.0f;
+			shapeDef.baseMaterial.density = 20.0f;
 
 			b3SphericalJointDef jointDef = b3DefaultSphericalJointDef();
 			// b3RevoluteJointDef jointDef = b3DefaultRevoluteJointDef();
@@ -1993,7 +1993,7 @@ public:
 		float torqueThreshold = 10000.0f;
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 
 		// distance joint
 		{
@@ -2289,7 +2289,7 @@ public:
 			bodyDef.type = b3_dynamicBody;
 			m_chassisId = b3CreateBody( m_worldId, &bodyDef );
 
-			shapeDef.density = 0.5f;
+			shapeDef.baseMaterial.density = 0.5f;
 			b3BoxHull box = b3MakeBoxHull( 2.0f, 0.5f, 1.0f );
 			b3CreateHullShape( m_chassisId, &shapeDef, &box.base );
 		}
@@ -2308,7 +2308,7 @@ public:
 			b3CreateParallelJoint( m_worldId, &parallelJointDef );
 		}
 
-		shapeDef.density = 2.0f;
+		shapeDef.baseMaterial.density = 2.0f;
 		shapeDef.baseMaterial.friction = 3.0f;
 
 		bodyDef.type = b3_dynamicBody;
@@ -2922,7 +2922,7 @@ public:
 		b3BodyId doorId = b3CreateBody( m_worldId, &bodyDef );
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density *= 0.5f;
+		shapeDef.baseMaterial.density *= 0.5f;
 		shapeDef.baseMaterial.friction = 0.1f;
 		shapeDef.baseMaterial.customColor = b3MakeDebugColor( b3_colorDarkCyan, b3_debugMaterialMetallic );
 		b3BoxHull box = b3MakeBoxHull( 0.05f, m_doorHalfHeight, m_doorHalfDepth );

@@ -267,6 +267,7 @@ void b3RecW_MATERIAL( b3RecBuffer* buf, b3SurfaceMaterial v )
 	b3RecW_F32( buf, v.friction );
 	b3RecW_F32( buf, v.restitution );
 	b3RecW_F32( buf, v.rollingResistance );
+	b3RecW_F32( buf, v.density );
 	b3RecW_VEC3( buf, v.tangentVelocity );
 	b3RecW_U64( buf, v.userMaterialId );
 	b3RecW_U32( buf, v.customColor );
@@ -388,7 +389,6 @@ void b3RecW_SHAPEDEF( b3RecBuffer* buf, b3ShapeDef v )
 		b3RecW_MATERIAL( buf, v.materials[i] );
 	}
 	b3RecW_MATERIAL( buf, v.baseMaterial );
-	b3RecW_F32( buf, v.density );
 	b3RecW_F32( buf, v.explosionScale );
 	b3RecW_FILTER( buf, v.filter );
 	b3RecW_BOOL( buf, v.enableCustomFiltering );

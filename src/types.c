@@ -60,17 +60,16 @@ b3SurfaceMaterial b3DefaultSurfaceMaterial( void )
 {
 	b3SurfaceMaterial surfaceMaterial = { 0 };
 	surfaceMaterial.friction = 0.6f;
+	// density of water
+	float lengthUnits = b3GetLengthUnitsPerMeter();
+	surfaceMaterial.density = 1000.0f / ( lengthUnits * lengthUnits * lengthUnits );
 	return surfaceMaterial;
 }
 
 b3ShapeDef b3DefaultShapeDef( void )
 {
-	float lengthUnits = b3GetLengthUnitsPerMeter();
-
 	b3ShapeDef def = { 0 };
 	def.baseMaterial = b3DefaultSurfaceMaterial();
-	// density of water
-	def.density = 1000.0f / ( lengthUnits * lengthUnits * lengthUnits );
 	def.explosionScale = 1.0f;
 	def.filter = b3DefaultFilter();
 	def.updateBodyMass = true;

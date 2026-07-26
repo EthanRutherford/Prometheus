@@ -150,7 +150,7 @@ public:
 		float h = 0.5f;
 		float shift = h;
 		b3BoxHull box = b3MakeBoxHull( h, h, h );
-		shapeDef.density = 100.0f;
+		shapeDef.baseMaterial.density = 100.0f;
 		bodyDef.type = b3_dynamicBody;
 		for ( int i = 0; i < baseCount; ++i )
 		{

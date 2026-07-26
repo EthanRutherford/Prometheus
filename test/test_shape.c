@@ -887,7 +887,7 @@ static int ShapeNameTest( void )
 
 	// Default def leaves the name empty.
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	b3ShapeId shapeId = b3CreateSphereShape( bodyId, &shapeDef, &s );
 	if ( CheckShapeName( shapeId, NULL ) )
 		return 1;
@@ -931,7 +931,7 @@ static int ShapeFlagsTest( void )
 	b3Sphere s = { { 0.0f, 0.0f, 0.0f }, 0.5f };
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.enableSensorEvents = true;
 	shapeDef.enableContactEvents = true;
 	shapeDef.enableHitEvents = true;

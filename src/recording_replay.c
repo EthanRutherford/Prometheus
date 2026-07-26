@@ -346,6 +346,7 @@ b3SurfaceMaterial b3RecR_MATERIAL( b3RecReader* rdr )
 	m.friction = b3RecR_F32( rdr );
 	m.restitution = b3RecR_F32( rdr );
 	m.rollingResistance = b3RecR_F32( rdr );
+	m.density = b3RecR_F32( rdr );
 	m.tangentVelocity = b3RecR_VEC3( rdr );
 	m.userMaterialId = b3RecR_U64( rdr );
 	m.customColor = b3RecR_U32( rdr );
@@ -472,7 +473,6 @@ b3ShapeDef b3RecR_SHAPEDEF( b3RecReader* rdr )
 	}
 
 	def.baseMaterial = b3RecR_MATERIAL( rdr );
-	def.density = b3RecR_F32( rdr );
 	def.explosionScale = b3RecR_F32( rdr );
 	def.filter = b3RecR_FILTER( rdr );
 	def.enableCustomFiltering = b3RecR_BOOL( rdr );

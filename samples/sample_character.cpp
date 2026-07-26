@@ -470,7 +470,7 @@ public:
 			b3BodyId bodyId = b3CreateBody( m_worldId, &bodyDef );
 
 			b3ShapeDef shapeDef = b3DefaultShapeDef();
-			shapeDef.density = 1000.0f;
+			shapeDef.baseMaterial.density = 1000.0f;
 
 			b3BoxHull box = b3MakeBoxHull( 0.75f, 1.5f, 0.1f );
 			b3CreateHullShape( bodyId, &shapeDef, &box.base );
@@ -734,7 +734,7 @@ struct RigidbodyCharacter
 			shapeDef.baseMaterial.customColor = b3_colorLimeGreen;
 
 			float feetVolume = 8.0f * halfExtX * halfExtY * halfExtZ;
-			shapeDef.density = ( m_characterMass * 0.4f ) / feetVolume;
+			shapeDef.baseMaterial.density = ( m_characterMass * 0.4f ) / feetVolume;
 
 			b3Transform feetTransform = { { 0.0f, -m_totalHeight * 0.5f + halfExtY, 0.0f }, b3Quat_identity };
 			b3BoxHull feetBox = b3MakeTransformedBoxHull( halfExtX, halfExtY, halfExtZ, feetTransform );
@@ -763,7 +763,7 @@ struct RigidbodyCharacter
 				float h = capsuleTop - capsuleBottom;
 				float r = capsuleRadius;
 				float capsuleVolume = B3_PI * r * r * ( h + 4.0f * r / 3.0f );
-				shapeDef.density = ( m_characterMass * 0.6f ) / capsuleVolume;
+				shapeDef.baseMaterial.density = ( m_characterMass * 0.6f ) / capsuleVolume;
 
 				m_bodyCapsuleId = b3CreateCapsuleShape( m_bodyId, &shapeDef, &capsule );
 			}

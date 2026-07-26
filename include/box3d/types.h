@@ -407,21 +407,21 @@ typedef struct b3SurfaceMaterial
 	/// The rolling resistance usually in the range [0,1]. This is only used for spheres and capsules.
 	float rollingResistance;
 
+	/// The density, usually in kg/m^3.
+	float density;
+
 	/// The tangent velocity for conveyor belts. This is local to the shape and will be projected
 	/// onto the contact surface.
 	b3Vec3 tangentVelocity;
-
-	/// User material identifier. This is passed with query results and to friction and restitution
-	/// combining functions. It is not used internally.
-	uint64_t userMaterialId;
 
 	/// Custom debug draw color. Ignored if 0. The low 24 bits are RGB. The high byte may
 	/// carry a b3DebugMaterial preset, see b3MakeDebugColor.
 	/// @see b3HexColor
 	uint32_t customColor;
 
-	/// Explicit padding. Must be zero.
-	uint32_t padding;
+	/// User material identifier. This is passed with query results and to friction and restitution
+	/// combining functions. It is not used internally.
+	uint64_t userMaterialId;
 } b3SurfaceMaterial;
 
 /// Use this to initialize your surface material
@@ -472,9 +472,6 @@ typedef struct b3ShapeDef
 
 	/// The base surface material. Ignored for compound shapes.
 	b3SurfaceMaterial baseMaterial;
-
-	/// The density, usually in kg/m^3.
-	float density;
 
 	/// Explosion scale for b3World_Explode. non-dimensional
 	float explosionScale;
@@ -2973,7 +2970,7 @@ typedef struct b3DebugShape
 typedef struct b3DebugDraw
 {
 	/// Draws a user shape. The userShape pointer is owned by the application and is known to Box3D as
-	/// an opaque pointer returned from b3CreateDebugShapeCallback. When this is called the drawn shape has 
+	/// an opaque pointer returned from b3CreateDebugShapeCallback. When this is called the drawn shape has
 	/// passed a culling test against drawingBounds below.
 	void ( *DrawShapeFcn )( void* userShape, b3WorldTransform transform, b3HexColor color, void* context );
 

@@ -50,7 +50,7 @@ public:
 						bodyDef.position = { 2.0f * coeff * extent + offset, yy, 0.0f };
 						b3BodyId bodyId = b3CreateBody( m_worldId, &bodyDef );
 
-						shapeDef.density = count == 1 ? ( j + 1.0f ) * 100.0f : 1.0f;
+						shapeDef.baseMaterial.density = count == 1 ? ( j + 1.0f ) * 100.0f : 1.0f;
 						b3CreateHullShape( bodyId, &shapeDef, &box.base );
 					}
 
@@ -172,7 +172,7 @@ public:
 
 		b3BoxHull box = b3MakeBoxHull( m_extent, m_extent, m_extent );
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 
 		m_bodyCount = m_baseCount * ( m_baseCount + 1 ) / 2;
 		m_bodyIds = (b3BodyId*)realloc( m_bodyIds, m_bodyCount * sizeof( b3BodyId ) );

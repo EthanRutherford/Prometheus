@@ -743,7 +743,7 @@ public:
 		jointDef.base.drawScale = 0.1f;
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 20.0f;
+		shapeDef.baseMaterial.density = 20.0f;
 
 		b3BodyDef bodyDef = b3DefaultBodyDef();
 		bodyDef.type = b3_dynamicBody;
@@ -871,7 +871,7 @@ public:
 		b3BoxHull box = b3MakeBoxHull( 4.0f * radius, 0.1f * radius, 4.0f * radius );
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 2.0f;
+		shapeDef.baseMaterial.density = 2.0f;
 
 		b3BodyDef bodyDef = b3DefaultBodyDef();
 		bodyDef.type = b3_dynamicBody;
@@ -944,7 +944,7 @@ public:
 		bodyDef.type = b3_dynamicBody;
 		// bodyDef.gravityScale = 0.5f;
 
-		shapeDef.density = 5.0f;
+		shapeDef.baseMaterial.density = 5.0f;
 		bodyDef.position = { -2.0f * a, y, 0.0f };
 		b3BodyId wingBodyId1 = b3CreateBody( m_worldId, &bodyDef );
 		m_shapeId1 = b3CreateHullShape( wingBodyId1, &shapeDef, &box1.base );
@@ -957,7 +957,7 @@ public:
 		// bodyDef.type = b3_staticBody;
 		b3BodyId torsoBodyId = b3CreateBody( m_worldId, &bodyDef );
 
-		shapeDef.density = 10.0f;
+		shapeDef.baseMaterial.density = 10.0f;
 		m_torsoShapeId = b3CreateCapsuleShape( torsoBodyId, &shapeDef, &capsule );
 
 		b3RevoluteJointDef jointDef = b3DefaultRevoluteJointDef();
