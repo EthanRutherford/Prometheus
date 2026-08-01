@@ -394,6 +394,7 @@ typedef struct b3Filter
 B3_API b3Filter b3DefaultFilter( void );
 
 /// Material properties supported per triangle on meshes and height fields
+/// Also supported per voxel on voxel volumes. Ignored for convex shapes and compounds.
 /// @ingroup shape
 typedef struct b3SurfaceMaterial
 {
@@ -450,6 +451,9 @@ typedef enum b3ShapeType
 	/// A sphere with an offset
 	b3_sphereShape,
 
+	/// A voxel grid
+	b3_voxelShape,
+
 	/// The number of shape types
 	b3_shapeTypeCount
 } b3ShapeType;
@@ -464,10 +468,11 @@ typedef struct b3ShapeDef
 	/// Use this to store application specific shape data.
 	void* userData;
 
-	/// Surface material used on mesh shapes per triangle. Ignored for convex shapes. Ignored for compound shapes.
+	/// Surface material used on mesh shapes per triangle, or voxel shapes per voxel. Ignored for convex shapes. Ignored for
+	/// compound shapes.
 	b3SurfaceMaterial* materials;
 
-	/// Surface material count.
+	/// Number of surface/voxel materials. Ignored for convex shapes. Ignored for compound shapes.
 	int materialCount;
 
 	/// The base surface material. Ignored for compound shapes.
@@ -2564,6 +2569,98 @@ typedef bool b3CompoundQueryFcn( const b3CompoundData* compound, int childIndex,
 
 /**@}*/ // compound
 
+/**
+ * @defgroup voxels Voxels
+ * @brief Voxel collision shape
+ * @{
+ */
+
+/// Input voxel definition for creating a voxel shape. Each voxel can have a different material.
+typedef struct b3VoxelDef
+{
+	/// Encoded voxel coordinate, see b3EncodeVoxel and b3DecodeVoxel*.
+	uint64_t encoded;
+
+	/// Voxel material index. Indexes into b3ShapeDef::materials.
+	uint8_t matIndex;
+} b3VoxelDef;
+
+/// Input voxel grid definition for creating a voxel shape. The voxel grid is axis-aligned in local space.
+typedef struct b3VoxelsDef
+{
+	/// The list of voxels. These are the filled voxels in the grid. The coordinates are in voxel space.
+	/// The voxel coordinates are in the range [0, dimensions.x), [0, dimensions.y), [0, dimensions.z).
+	b3VoxelDef* voxels;
+
+	/// The voxel count. Must be 1 or more.
+	int voxelCount;
+
+	/// If true, the voxel list is already sorted by encoded voxel coordinate in ascending order, else the list will be sorted
+	/// during creation. This is useful if your voxel source is in a format that can be easily serialized in the requisite order.
+	bool isPresorted;
+} b3VoxelsDef;
+
+#define B3_VOXEL_VERSION 0xC1A9D8E7B2F4A6D3ull
+
+/// A voxel node in a 64-tree bounding volume hierarchy. Each node has up to 64 children.
+/// The children are stored in a contiguous array of nodes and materials.
+/// The occupancy bitfield indicates which children are present, and allows for efficient storage of sparse voxel data,
+/// as well as fast traversal of the voxel hierarchy during collision detection and ray casting.
+typedef struct b3VoxelNode
+{
+	/// 64-bit occupancy bitfield. Each bit represents a child node. If the bit is set, the child is present.
+	uint64_t occupancy;
+
+	/// Offset to the first child in the node/material index array.
+	uint32_t childrenOffset;
+} b3VoxelNode;
+
+typedef struct b3VoxelAttrs {
+	uint8_t matIndex;
+} b3VoxelAttrs;
+
+/// This is a voxel volume represented as a 64-tree bounding volume hierarchy.
+/// @note This struct has data hanging off the end and cannot be directly copied.
+typedef struct b3VoxelData
+{
+	/// The voxel version is always first.
+	uint64_t version;
+
+	/// The total number of bytes for this voxel data.
+	uint32_t byteCount;
+
+	/// The local axis-aligned bounding box of the voxel volume.
+	b3AABB bounds;
+
+	/// The height of the bounding volume hierarchy.
+	uint32_t treeHeight;
+
+	/// Offset of the node array in bytes from the struct address.
+	uint32_t nodeOffset;
+
+	/// The number of BVH nodes.
+	uint32_t nodeCount;
+
+	/// Offset of the voxel array in bytes from the struct address.
+	uint32_t voxelOffset;
+
+	/// The number of voxels.
+	uint32_t voxelCount;
+} b3VoxelData;
+
+/// This allows voxel data to be re-used with different scales.
+typedef struct b3Voxels
+{
+	/// Immutable pointer to the voxel data.
+	const b3VoxelData* data;
+
+	/// Uniform scale of the voxel grid. This is the size of a single voxel in world space.
+	/// This scale must be positive and non-zero. The voxel grid is axis-aligned in local space.
+	float scale;
+} b3Voxels;
+
+/**@}*/ // voxels
+
 /**@}*/ // geometry
 
 /**
@@ -2961,6 +3058,7 @@ typedef struct b3DebugShape
 		const b3HullData* hull;				  ///< Convex hull shape.
 		const b3Mesh* mesh;					  ///< Mesh shape with scale.
 		const b3Sphere* sphere;				  ///< Sphere shape.
+		const b3Voxels* voxels;				  ///< Voxel shape.
 	};
 } b3DebugShape;
 

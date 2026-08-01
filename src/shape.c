@@ -67,6 +67,12 @@ static float b3ComputeShapeMargin( b3Shape* shape )
 			return B3_MAX_AABB_MARGIN;
 		}
 
+		case b3_voxelShape:
+		{
+			margin = b3Length( b3AABB_Extents( shape->voxels.data->bounds ) );
+		}
+		break;
+
 		default:
 			B3_VALIDATE( false );
 			return B3_MAX_AABB_MARGIN;
@@ -158,6 +164,11 @@ static b3Shape* b3CreateShapeInternal( b3World* world, b3Body* body, b3WorldTran
 
 		case b3_heightShape:
 			shape->heightField = (b3HeightFieldData*)geometry;
+			break;
+
+		case b3_voxelShape:
+			shape->voxels.data = (b3VoxelData*)geometry;
+			shape->voxels.scale = b3SafeScale( scale ).x;
 			break;
 
 		default:
@@ -437,6 +448,23 @@ b3ShapeId b3CreateBakedCompoundShape( b3BodyId bodyId, b3ShapeDef* def, const b3
 	return shapeId;
 }
 
+b3ShapeId b3CreateVoxelShape( b3BodyId bodyId, const b3ShapeDef* def, const b3VoxelData* voxels, float scale )
+{
+	b3ShapeId shapeId = b3CreateShape( bodyId, def, voxels, b3_voxelShape, b3Transform_identity, b3Vec3Of( scale ), false );
+	if ( shapeId.index1 != 0 )
+	{
+		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+		if ( world != NULL && world->recording != NULL )
+		{
+			// TODO: implement voxel recording.
+			// uint32_t geometryId = b3RecInternVoxels( world->recording, voxels );
+			// b3RecArgs_CreateVoxelShape createArgs = { bodyId, *def, geometryId, scale };
+			// b3RecWriteRet_CreateVoxelShape( world->recording, &createArgs, shapeId );
+		}
+	}
+	return shapeId;
+}
+
 // Destroy a shape on a body. This doesn't need to be called when destroying a body.
 static void b3DestroyShapeInternal( b3World* world, b3Shape* shape, b3Body* body, bool wakeBodies )
 {
@@ -580,6 +608,9 @@ b3AABB b3ComputeShapeAABB( const b3Shape* shape, b3Transform transform )
 		case b3_sphereShape:
 			return b3ComputeSphereAABB( &shape->sphere, transform );
 
+		case b3_voxelShape:
+			return b3ComputeVoxelAABB( &shape->voxels, transform );
+
 		default:
 		{
 			B3_ASSERT( false );
@@ -626,6 +657,10 @@ b3AABB b3ComputeSweptShapeAABB( const b3Shape* shape, const b3Sweep* sweep, floa
 		case b3_sphereShape:
 			return b3ComputeSweptSphereAABB( &shape->sphere, xf1, xf2 );
 
+		case b3_voxelShape:
+			// TODO: figure this out.
+			printf( "called b3ComputeSweptShapeAABB for voxel shape, returning empty AABB\n" );
+
 		default:
 			B3_ASSERT( false );
 			return (b3AABB){ xf1.p, xf1.p };
@@ -657,6 +692,11 @@ b3Vec3 b3GetShapeCentroid( const b3Shape* shape )
 			b3AABB aabb = b3ComputeHeightFieldAABB( shape->heightField, b3Transform_identity );
 			return b3AABB_Center( aabb );
 		}
+		case b3_voxelShape:
+		{
+			b3AABB aabb = b3ComputeVoxelAABB( &shape->voxels, b3Transform_identity );
+			return b3AABB_Center( aabb );
+		}
 		default:
 			return b3Vec3_zero;
 	}
@@ -676,6 +716,10 @@ float b3GetShapeArea( const b3Shape* shape )
 
 		case b3_sphereShape:
 			return 2.0f * B3_PI * shape->sphere.radius;
+
+		case b3_voxelShape:
+			// TODO: determine if I need to implement this, and how
+			printf( "called b3GetShapeArea for voxel shape, returning 0.0f\n" );
 
 		default:
 			return 0.0f;
@@ -703,6 +747,10 @@ float b3GetShapeProjectedArea( const b3Shape* shape, b3Vec3 planeNormal )
 		case b3_sphereShape:
 			return B3_PI * shape->sphere.radius * shape->sphere.radius;
 
+		case b3_voxelShape:
+			// TODO: determine if I need to implement this, and how
+			printf( "called b3GetShapeProjectedArea for voxel shape, returning 0.0f\n" );
+
 		default:
 			return 0.0f;
 	}
@@ -720,6 +768,9 @@ b3MassData b3ComputeShapeMass( const b3Shape* shape )
 
 		case b3_sphereShape:
 			return b3ComputeSphereMass( &shape->sphere, shape->material.density );
+
+		case b3_voxelShape:
+			return b3ComputeVoxelMass( &shape->voxels, shape->material.density, shape->materials );
 
 		default:
 			return (b3MassData){ 0 };
@@ -781,6 +832,17 @@ b3ShapeExtent b3ComputeShapeExtent( const b3Shape* shape, b3Vec3 localCenter )
 		}
 		break;
 
+		case b3_voxelShape:
+			b3AABB aabb = shape->voxels.data->bounds;
+			b3Vec3 d1 = b3Sub( localCenter, aabb.lowerBound );
+			b3Vec3 d2 = b3Sub( aabb.upperBound, localCenter );
+			float face = b3MinFloat( b3MinFloat( b3MinFloat( d1.x, d2.x ), b3MinFloat( d1.y, d2.y ) ), b3MinFloat( d1.z, d2.z ) );
+			float halfWidth = 0.5f * shape->voxels.scale;
+			extent.minExtent = b3MaxFloat( face, halfWidth );
+			b3Vec3 p = b3FarthestPointOnAABB( aabb, localCenter );
+			extent.maxExtent = b3Abs( p );
+			break;
+
 		default:
 			break;
 	}
@@ -814,6 +876,9 @@ b3CastOutput b3RayCastShape( const b3Shape* shape, b3Transform transform, const 
 			break;
 		case b3_heightShape:
 			output = b3RayCastHeightField( shape->heightField, &localInput );
+			break;
+		case b3_voxelShape:
+			output = b3RayCastVoxels( &shape->voxels, &localInput );
 			break;
 		default:
 			return output;
@@ -864,6 +929,11 @@ b3CastOutput b3ShapeCastShape( const b3Shape* shape, b3Transform transform, cons
 		case b3_sphereShape:
 			output = b3ShapeCastSphere( &shape->sphere, &localInput );
 			break;
+
+		case b3_voxelShape:
+			output = b3ShapeCastVoxels( &shape->voxels, &localInput );
+			break;
+
 		default:
 			return output;
 	}
@@ -895,6 +965,9 @@ bool b3OverlapShape( const b3Shape* shape, b3Transform transform, const b3ShapeP
 
 		case b3_sphereShape:
 			return b3OverlapSphere( &shape->sphere, transform, proxy );
+
+		case b3_voxelShape:
+			return b3OverlapVoxels( &shape->voxels, transform, proxy );
 
 		default:
 			B3_ASSERT( false );
@@ -966,6 +1039,10 @@ int b3CollideMover( b3PlaneResult* planes, int planeCapacity, const b3Shape* sha
 
 		case b3_heightShape:
 			planeCount = b3CollideMoverAndHeightField( planes, planeCapacity, shape->heightField, &localMover );
+			break;
+
+		case b3_voxelShape:
+			planeCount = b3CollideMoverAndVoxels( planes, planeCapacity, &shape->voxels, &localMover );
 			break;
 
 		default:
@@ -1055,6 +1132,10 @@ b3ShapeProxy b3MakeShapeProxy( const b3Shape* shape )
 			const b3Vec3* points = b3GetHullPoints( hull );
 			return (b3ShapeProxy){ points, hull->vertexCount, 0.0f };
 		}
+
+		case b3_voxelShape:
+			// TODO: figure out how to implement this.
+			printf( "called b3MakeShapeProxy for voxel shape, returning empty proxy\n" );
 
 		default:
 		{
@@ -1529,6 +1610,14 @@ const b3HeightFieldData* b3Shape_GetHeightField( b3ShapeId shapeId )
 	return shape->heightField;
 }
 
+const b3Voxels b3Shape_GetVoxels( b3ShapeId shapeId )
+{
+	b3World* world = b3GetWorld( shapeId.world0 );
+	b3Shape* shape = b3GetShape( world, shapeId );
+	B3_ASSERT( shape->type == b3_voxelShape );
+	return shape->voxels;
+}
+
 void b3Shape_SetSphere( b3ShapeId shapeId, const b3Sphere* sphere )
 {
 	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
@@ -1661,6 +1750,42 @@ void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Vec3 scal
 	shape->mesh.data = meshData;
 	shape->mesh.scale = b3SafeScale( scale );
 	shape->type = b3_meshShape;
+	shape->aabbMargin = b3ComputeShapeMargin( shape );
+
+	// need to wake bodies so they can react to the shape change
+	bool wakeBodies = true;
+	bool destroyProxy = true;
+	b3ResetProxy( world, shape, wakeBodies, destroyProxy );
+
+	world->locked = false;
+}
+
+void b3Shape_SetVoxels( b3ShapeId shapeId, const b3Voxels* voxels )
+{
+	B3_ASSERT( voxels != NULL /* && b3IsValidVoxels( voxels ) */ );
+
+	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	if ( world == NULL )
+	{
+		return;
+	}
+
+	world->locked = true;
+
+	if ( world->recording != NULL )
+	{
+		// TODO: implement voxel recording
+		// uint32_t geometryId = b3RecInternVoxels( world->recording, voxels );
+		// b3RecArgs_ShapeSetVoxels setArgs = { shapeId, geometryId };
+		// b3RecWrite_ShapeSetVoxels( world->recording, &setArgs );
+	}
+
+	b3Shape* shape = b3GetShape( world, shapeId );
+
+	b3DestroyShapeAllocationForShapeChange( world, shape );
+
+	shape->voxels = *voxels;
+	shape->type = b3_voxelShape;
 	shape->aabbMargin = b3ComputeShapeMargin( shape );
 
 	// need to wake bodies so they can react to the shape change
@@ -2040,6 +2165,10 @@ void b3Shape_ApplyWind( b3ShapeId shapeId, b3Vec3 wind, float drag, float lift, 
 			}
 		}
 		break;
+
+		case b3_voxelShape:
+			// TODO: determine if I need to implement this, and how
+			printf( "b3Shape_ApplyWind: voxel shape not supported yet\n" );
 
 		default:
 			break;

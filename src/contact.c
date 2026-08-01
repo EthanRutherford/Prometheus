@@ -138,6 +138,10 @@ void b3InitializeContactRegisters( void )
 		b3AddType( b3_heightShape, b3_sphereShape );
 		b3AddType( b3_heightShape, b3_capsuleShape );
 		b3AddType( b3_heightShape, b3_hullShape );
+		b3AddType( b3_voxelShape, b3_sphereShape );
+		b3AddType( b3_voxelShape, b3_capsuleShape );
+		b3AddType( b3_voxelShape, b3_hullShape );
+		b3AddType( b3_voxelShape, b3_voxelShape );
 		s_initialized = true;
 	}
 }
@@ -847,6 +851,11 @@ bool b3UpdateContact( b3World* world, int workerIndex, b3Contact* contact, b3Sha
 		}
 
 		B3_ASSERT( ( touching == true && contact->manifoldCount > 0 ) || ( touching == false && contact->manifoldCount == 0 ) );
+	}
+	else if ( shapeA->type == b3_voxelShape )
+	{
+		// TODO: implement voxel contact
+		touching = false;
 	}
 	else
 	{

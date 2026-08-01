@@ -87,6 +87,7 @@ public:
 			if ( result.hit )
 			{
 				DrawLine( result.point, b3OffsetPos( result.point, 0.5f * result.normal ), MakeColor( b3_colorGreen ) );
+				rayTranslation = b3MulSV( result.fraction, rayTranslation );
 			}
 
 			DrawPoint( rayOrigin, 4.0f, MakeColor( b3_colorGreen ) );
@@ -1518,11 +1519,9 @@ public:
 		}
 
 		DrawTextLine( "Long ray casts" );
-		DrawTextLine( "Origin %.0f km. Green: accurate, Orange: drifting, Red: miss.",
-					  m_rayLengthKilometers );
-		DrawTextLine( "Failures: sphere %.0f%%  capsule %.0f%%  hull %.0f%%  mesh %.0f%%  hf %.0f%%",
-					  100.0f * m_failRate[0], 100.0f * m_failRate[1], 100.0f * m_failRate[2], 100.0f * m_failRate[3],
-					  100.0f * m_failRate[4] );
+		DrawTextLine( "Origin %.0f km. Green: accurate, Orange: drifting, Red: miss.", m_rayLengthKilometers );
+		DrawTextLine( "Failures: sphere %.0f%%  capsule %.0f%%  hull %.0f%%  mesh %.0f%%  hf %.0f%%", 100.0f * m_failRate[0],
+					  100.0f * m_failRate[1], 100.0f * m_failRate[2], 100.0f * m_failRate[3], 100.0f * m_failRate[4] );
 	}
 
 	struct CastHit

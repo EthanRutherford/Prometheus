@@ -44,6 +44,14 @@ typedef struct b3Vec3
 	float z;
 } b3Vec3;
 
+/// A 3D vector with integer components.
+typedef struct b3Vec3i
+{
+	int x;
+	int y;
+	int z;
+} b3Vec3i;
+
 /// Cosine and sine pair.
 /// This uses a custom implementation designed for cross-platform determinism.
 typedef struct b3CosSin
@@ -195,14 +203,14 @@ B3_API float b3Atan2( float y, float x );
 /// for cross-platform determinism.
 B3_API b3CosSin b3ComputeCosSin( float radians );
 
-/// @deprecated 
+/// @deprecated
 B3_INLINE float b3Sin( float radians )
 {
 	b3CosSin cs = b3ComputeCosSin( radians );
 	return cs.sine;
 }
 
-/// @deprecated 
+/// @deprecated
 B3_INLINE float b3Cos( float radians )
 {
 	b3CosSin cs = b3ComputeCosSin( radians );
@@ -222,10 +230,22 @@ B3_INLINE b3Vec3 b3Add( b3Vec3 a, b3Vec3 b )
 	return B3_LITERAL( b3Vec3 ){ a.x + b.x, a.y + b.y, a.z + b.z };
 }
 
+/// Vector addition (integer)
+B3_INLINE b3Vec3i b3Addi( b3Vec3i a, b3Vec3i b )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x + b.x, a.y + b.y, a.z + b.z };
+}
+
 /// Vector subtraction.
 B3_INLINE b3Vec3 b3Sub( b3Vec3 a, b3Vec3 b )
 {
 	return B3_LITERAL( b3Vec3 ){ a.x - b.x, a.y - b.y, a.z - b.z };
+}
+
+/// Vector subtraction (integer)
+B3_INLINE b3Vec3i b3Subi( b3Vec3i a, b3Vec3i b )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x - b.x, a.y - b.y, a.z - b.z };
 }
 
 /// Vector component-wise multiplication.
@@ -234,10 +254,22 @@ B3_INLINE b3Vec3 b3Mul( b3Vec3 a, b3Vec3 b )
 	return B3_LITERAL( b3Vec3 ){ a.x * b.x, a.y * b.y, a.z * b.z };
 }
 
+/// Vector component-wise multiplication (integer)
+B3_INLINE b3Vec3i b3Muli( b3Vec3i a, b3Vec3i b )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x * b.x, a.y * b.y, a.z * b.z };
+}
+
 /// Vector negation.
 B3_INLINE b3Vec3 b3Neg( b3Vec3 a )
 {
 	return B3_LITERAL( b3Vec3 ){ -a.x, -a.y, -a.z };
+}
+
+/// Vector negation (integer)
+B3_INLINE b3Vec3i b3Negi( b3Vec3i a )
+{
+	return B3_LITERAL( b3Vec3i ){ -a.x, -a.y, -a.z };
 }
 
 /// Vector dot product.
@@ -346,6 +378,12 @@ B3_INLINE b3Vec3 b3MulSV( float s, b3Vec3 a )
 	return B3_LITERAL( b3Vec3 ){ s * a.x, s * a.y, s * a.z };
 }
 
+/// s * a (integer)
+B3_INLINE b3Vec3i b3MulSVi( int32_t s, b3Vec3i a )
+{
+	return B3_LITERAL( b3Vec3i ){ s * a.x, s * a.y, s * a.z };
+}
+
 /// https://en.wikipedia.org/wiki/Cross_product
 B3_INLINE b3Vec3 b3Cross( b3Vec3 a, b3Vec3 b )
 {
@@ -438,6 +476,96 @@ B3_INLINE b3Vec3 b3SafeScale( b3Vec3 a )
 	b3Vec3 minScale = { B3_MIN_SCALE, B3_MIN_SCALE, B3_MIN_SCALE };
 	b3Vec3 safeScale = b3Mul( b3Sign( a ), b3Max( absScale, minScale ) );
 	return safeScale;
+}
+
+/// Component-wise floor
+B3_INLINE b3Vec3 b3Floor( b3Vec3 a )
+{
+	return B3_LITERAL( b3Vec3 ){
+		floorf( a.x ),
+		floorf( a.y ),
+		floorf( a.z ),
+	};
+}
+
+/// Component-wise ceil
+B3_INLINE b3Vec3 b3Ceil( b3Vec3 a )
+{
+	return B3_LITERAL( b3Vec3 ){
+		ceilf( a.x ),
+		ceilf( a.y ),
+		ceilf( a.z ),
+	};
+}
+
+/// Component-wise bitwise AND (integer only)
+B3_INLINE b3Vec3i b3And( b3Vec3i a, b3Vec3i b )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x & b.x, a.y & b.y, a.z & b.z };
+}
+
+/// Component-wise bitwise OR (integer only)
+B3_INLINE b3Vec3i b3Or( b3Vec3i a, b3Vec3i b )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x | b.x, a.y | b.y, a.z | b.z };
+}
+
+/// Component-wise bitwise XOR (integer only)
+B3_INLINE b3Vec3i b3Xor( b3Vec3i a, b3Vec3i b )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x ^ b.x, a.y ^ b.y, a.z ^ b.z };
+}
+
+/// Component-wise bitwise NOT (integer only)
+B3_INLINE b3Vec3i b3Not( b3Vec3i a )
+{
+	return B3_LITERAL( b3Vec3i ){ ~a.x, ~a.y, ~a.z };
+}
+
+/// Component-wise left shift (integer only)
+B3_INLINE b3Vec3i b3ShiftLeft( b3Vec3i a, int n )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x << n, a.y << n, a.z << n };
+}
+
+/// Component-wise right shift (integer only)
+B3_INLINE b3Vec3i b3ShiftRight( b3Vec3i a, int n )
+{
+	return B3_LITERAL( b3Vec3i ){ a.x >> n, a.y >> n, a.z >> n };
+}
+
+/// Component-wise select
+B3_INLINE b3Vec3 b3Select( b3Vec3i mask, b3Vec3 a, b3Vec3 b )
+{
+	return B3_LITERAL( b3Vec3 ){
+		mask.x ? a.x : b.x,
+		mask.y ? a.y : b.y,
+		mask.z ? a.z : b.z,
+	};
+}
+
+/// Make a vector from one scalar.
+B3_INLINE b3Vec3 b3Vec3Of( float s )
+{
+	return B3_LITERAL( b3Vec3 ){ s, s, s };
+}
+
+/// Make a vector from one scalar (integer)
+B3_INLINE b3Vec3i b3Vec3iOf( int s )
+{
+	return B3_LITERAL( b3Vec3i ){ s, s, s };
+}
+
+/// Convert b3Vec3 to b3Vec3i
+B3_INLINE b3Vec3i b3ToVec3i( b3Vec3 a )
+{
+	return B3_LITERAL( b3Vec3i ){ (int)a.x, (int)a.y, (int)a.z };
+}
+
+/// Convert b3Vec3i to b3Vec3
+B3_INLINE b3Vec3 b3FromVec3i( b3Vec3i a )
+{
+	return B3_LITERAL( b3Vec3 ){ (float)a.x, (float)a.y, (float)a.z };
 }
 
 /// Does the supplied quaternion have unit length?

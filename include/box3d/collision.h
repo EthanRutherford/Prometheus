@@ -464,6 +464,48 @@ B3_API b3CompoundData* b3ConvertBytesToCompound( uint8_t* bytes, int byteCount )
 /**@}*/ // compound
 
 /**
+ * @addtogroup voxels
+ * @{
+ */
+
+/// Encode a voxel coordinate into a 64-bit integer. The x, y, and z coordinates must be in the range [0, 2^21).
+B3_API uint64_t b3EncodeVoxel( uint32_t x, uint32_t y, uint32_t z );
+
+/// Decode a voxel x coordinate from a 64-bit integer. The x, y, and z coordinates are in the range [0, 2^21).
+B3_API uint32_t b3DecodeVoxelX( uint64_t code );
+
+/// Decode a voxel y coordinate from a 64-bit integer. The x, y, and z coordinates are in the range [0, 2^21).
+B3_API uint32_t b3DecodeVoxelY( uint64_t code );
+
+/// Decode a voxel z coordinate from a 64-bit integer. The x, y, and z coordinates are in the range [0, 2^21).
+B3_API uint32_t b3DecodeVoxelZ( uint64_t code );
+
+/// Create a generic voxel shape.
+B3_API b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def );
+
+/// Destroy a voxel shape.
+B3_API void b3DestroyVoxels( b3VoxelData* voxels );
+
+/// Callback used by b3IterateVoxels.
+typedef void b3VoxelIteratorFcn( uint64_t code, uint32_t index, void* context );
+
+/// Iterate over all voxels in a voxel shape. The callback is called for each voxel that is present in the shape.
+B3_API void b3IterateVoxels( const b3VoxelData* voxels, b3VoxelIteratorFcn* fcn, void* context );
+
+/// Get read only voxel attributes. 
+B3_INLINE const b3VoxelAttrs* b3GetVoxelAttrs( const b3VoxelData* voxels )
+{
+	if ( voxels->voxelOffset == 0 )
+	{
+		return NULL;
+	}
+
+	return (const b3VoxelAttrs*)( (intptr_t)voxels + voxels->voxelOffset );
+}
+
+/**@}*/ // voxels
+
+/**
  * @addtogroup geometry
  * @{
  */
@@ -476,6 +518,10 @@ B3_API b3MassData b3ComputeCapsuleMass( const b3Capsule* shape, float density );
 
 /// Compute mass properties of a hull
 B3_API b3MassData b3ComputeHullMass( const b3HullData* shape, float density );
+
+/// Compute mass properties of a voxel volume
+/// note: The density is taken from the materials array, so it can be set per voxel
+B3_API b3MassData b3ComputeVoxelMass( const b3Voxels* shape, float baseDensity, b3SurfaceMaterial* materials );
 
 /// Compute the bounding box of a transformed sphere
 B3_API b3AABB b3ComputeSphereAABB( const b3Sphere* shape, b3Transform transform );
@@ -494,6 +540,9 @@ B3_API b3AABB b3ComputeHeightFieldAABB( const b3HeightFieldData* shape, b3Transf
 
 /// Compute the bounding box of a compound
 B3_API b3AABB b3ComputeCompoundAABB( const b3CompoundData* shape, b3Transform transform );
+
+/// Compute the bounding box of a voxel volume
+B3_API b3AABB b3ComputeVoxelAABB( const b3Voxels* shape, b3Transform transform );
 
 /**@}*/ // geometry
 
@@ -523,6 +572,9 @@ B3_API bool b3OverlapMesh( const b3Mesh* shape, b3Transform shapeTransform, cons
 /// Overlap shape versus sphere
 B3_API bool b3OverlapSphere( const b3Sphere* shape, b3Transform shapeTransform, const b3ShapeProxy* proxy );
 
+/// Overlap shape versus voxel volume
+B3_API bool b3OverlapVoxels( const b3Voxels* shape, b3Transform shapeTransform, const b3ShapeProxy* proxy );
+
 /// Ray cast versus sphere in local space. A zero length ray is a point query. Initial overlap
 /// reports a hit at the ray origin with zero fraction and zero normal.
 B3_API b3CastOutput b3RayCastSphere( const b3Sphere* shape, const b3RayCastInput* input );
@@ -549,6 +601,10 @@ B3_API b3CastOutput b3RayCastMesh( const b3Mesh* shape, const b3RayCastInput* in
 /// Ray cast versus height field in local space. A thin surface with no interior, so there is no overlap case.
 B3_API b3CastOutput b3RayCastHeightField( const b3HeightFieldData* shape, const b3RayCastInput* input );
 
+/// Ray cast versus a voxel volume in local space. A zero length ray is a point query. Initial overlap
+/// reports a hit at the ray origin with zero fraction and zero normal.
+B3_API b3CastOutput b3RayCastVoxels( const b3Voxels* shape, const b3RayCastInput* input );
+
 /// Shape cast versus a sphere. Initial overlap is treated as a miss.
 B3_API b3CastOutput b3ShapeCastSphere( const b3Sphere* shape, const b3ShapeCastInput* input );
 
@@ -566,6 +622,9 @@ B3_API b3CastOutput b3ShapeCastMesh( const b3Mesh* shape, const b3ShapeCastInput
 
 /// Shape cast versus a height field. Initial overlap is treated as a miss.
 B3_API b3CastOutput b3ShapeCastHeightField( const b3HeightFieldData* shape, const b3ShapeCastInput* input );
+
+/// Shape cast versus a voxel volume. Initial overlap is treated as a miss.
+B3_API b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* input );
 
 /// Query callback.
 typedef bool b3MeshQueryFcn( b3Vec3 a, b3Vec3 b, b3Vec3 c, int triangleIndex, void* context );
@@ -646,6 +705,18 @@ B3_API void b3CollideTriangleAndHull( b3LocalManifold* manifold, int capacity, b
 /// Collide a triangle and sphere. Normal points from triangle to sphere.
 B3_API void b3CollideTriangleAndSphere( b3LocalManifold* manifold, int capacity, const b3Vec3* triangleA,
 										const b3Sphere* sphereB );
+
+/// Collide two voxel volumes.
+B3_API void b3CollideVoxels( b3LocalManifold* manifold, int capacity, const b3VoxelData* voxelsA, const b3VoxelData* voxelsB,
+							 b3Transform transformBtoA );
+
+/// Collide a voxel volume and a sphere.
+B3_API void b3CollideVoxelsAndSphere( b3LocalManifold* manifold, int capacity, const b3VoxelData* voxelsA,
+									  const b3Sphere* sphereB, b3Transform transformBtoA );
+
+/// Collide a voxel volume and a capsule.
+B3_API void b3CollideVoxelsAndCapsule( b3LocalManifold* manifold, int capacity, const b3VoxelData* voxelsA,
+									   const b3Capsule* capsuleB, b3Transform transformBtoA );
 
 /**@}*/ // collision
 

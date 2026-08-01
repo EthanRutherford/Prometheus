@@ -6,6 +6,7 @@ set(BOX3D_SOURCE_FILES
 	algorithm.h
 	arena_allocator.c
 	arena_allocator.h
+	bits.h
 	bitset.c
 	bitset.h
 	block_allocator.c
@@ -86,6 +87,7 @@ set(BOX3D_SOURCE_FILES
 	triangle_manifold.c
 	types.c
 	verstable.h
+	voxels.c
 	weld_joint.c
 	wheel_joint.c
 

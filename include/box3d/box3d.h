@@ -833,6 +833,11 @@ B3_API b3ShapeId b3CreateHeightFieldShape( b3BodyId bodyId, const b3ShapeDef* de
 /// Runtime compounds can be dynamic and/or kinematic.
 B3_API b3ShapeId b3CreateBakedCompoundShape( b3BodyId bodyId, b3ShapeDef* def, const b3CompoundData* compound );
 
+/// Create a voxel shape and attach it to a body. The shape definition is fully cloned but the voxel data is not.
+/// Contacts are not created until the next time step.
+/// @return the shape id for accessing the shape
+B3_API b3ShapeId b3CreateVoxelShape( b3BodyId bodyId, const b3ShapeDef* def, const b3VoxelData* voxels, float scale );
+
 /// Destroy a shape. You may defer the body mass update which can improve performance if several shapes on a
 ///	body are destroyed at once.
 ///	@see b3Body_ApplyMassFromShapes
@@ -959,6 +964,9 @@ B3_API b3Mesh b3Shape_GetMesh( b3ShapeId shapeId );
 /// Get the shape's height field. Asserts the type is correct.
 B3_API const b3HeightFieldData* b3Shape_GetHeightField( b3ShapeId shapeId );
 
+/// Get the shape's voxel data. Asserts the type is correct.
+B3_API const b3Voxels b3Shape_GetVoxels( b3ShapeId shapeId );
+
 /// Allows you to change a shape to be a sphere or update the current sphere.
 /// This does not modify the mass properties.
 /// @see b3Body_ApplyMassFromShapes
@@ -978,6 +986,11 @@ B3_API void b3Shape_SetHull( b3ShapeId shapeId, const b3HullData* hull );
 /// This does not modify the mass properties.
 /// @see b3Body_ApplyMassFromShapes
 B3_API void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Vec3 scale );
+
+/// Allows you to change a shape to be a voxel volume or update the current voxel volume.
+/// This does not modify the mass properties.
+/// @see b3Body_ApplyMassFromShapes
+B3_API void b3Shape_SetVoxels( b3ShapeId shapeId, const b3Voxels* voxels );
 
 /// Get the maximum capacity required for retrieving all the touching contacts on a shape
 B3_API int b3Shape_GetContactCapacity( b3ShapeId shapeId );

@@ -61,6 +61,7 @@ typedef struct b3Shape
 		b3Mesh mesh;
 		const b3HeightFieldData* heightField;
 		const b3CompoundData* compound;
+		b3Voxels voxels;
 	};
 
 } b3Shape;
@@ -112,6 +113,7 @@ int b3CollideMoverAndCapsule( b3PlaneResult* result, const b3Capsule* shape, con
 int b3CollideMoverAndHull( b3PlaneResult* result, const b3HullData* shape, const b3Capsule* mover );
 int b3CollideMoverAndMesh( b3PlaneResult* planes, int capacity, const b3Mesh* shape, const b3Capsule* mover );
 int b3CollideMoverAndHeightField( b3PlaneResult* results, int capacity, const b3HeightFieldData* shape, const b3Capsule* mover );
+int b3CollideMoverAndVoxels( b3PlaneResult* results, int capacity, const b3Voxels* shape, const b3Capsule* mover );
 int b3CollideMover( b3PlaneResult* planes, int planeCapacity, const b3Shape* shape, b3Transform transform,
 					const b3Capsule* mover );
 
