@@ -21,8 +21,9 @@
 
 #pragma once
 
-#include "box3d/collision.h"
 #include "gfx/geometry_registry.h"
+
+#include "box3d/collision.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -44,6 +45,11 @@ MeshHandle FindOrAddMesh( const b3MeshData* meshData );
 // different scales hash to different entries, per-instance scale stays
 // at (1, 1, 1) for heightfield draws.
 MeshHandle FindOrAddHeightField( const b3HeightFieldData* heightField );
+
+// Acquire for b3Voxels. The b3Voxels struct's per-instance `scale` is NOT
+// part of the geometry, callers pass it as the per-instance scale at draw time.
+// Two b3Voxels sharing the same b3VoxelData share one entry.
+MeshHandle FindOrAddVoxels( const b3VoxelData* voxelData );
 
 #ifdef __cplusplus
 } // extern "C"

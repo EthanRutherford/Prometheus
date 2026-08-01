@@ -104,6 +104,7 @@ typedef enum MeshKind
 	MESH_KIND_HULL,
 	MESH_KIND_MESH,
 	MESH_KIND_HEIGHTFIELD,
+	MESH_KIND_VOXELS,
 } MeshKind;
 
 // Per-entry edge-draw batch produced by UploadMeshInstances. One batch

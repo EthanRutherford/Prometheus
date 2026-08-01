@@ -92,13 +92,6 @@ typedef struct
 			int* childMap;
 			int childMapCount;
 		} compound;
-		struct
-		{
-			// For now, just keep a reference to the voxel data.
-			// eventually we'll generate a mesh instead.
-			const b3VoxelData* data;
-			float scale;
-		} voxels;
 	};
 } DebugShape;
 
@@ -183,7 +176,8 @@ void ResetAdapterPool( void )
 	for ( int i = 0; i < BOX3D_USER_SHAPE_CAPACITY; ++i )
 	{
 		DebugShape* us = &s_adapter.pool[i];
-		if ( us->kind == Box3DUS_Hull || us->kind == Box3DUS_Mesh || us->kind == Box3DUS_HeightField )
+		if ( us->kind == Box3DUS_Hull || us->kind == Box3DUS_Mesh || us->kind == Box3DUS_HeightField ||
+			 us->kind == Box3DUS_Voxels )
 		{
 			ReleaseMeshReference( us->geom.handle );
 		}
@@ -193,10 +187,6 @@ void ResetAdapterPool( void )
 			// so free the child map here too.
 			free( us->compound.childMap );
 			us->compound.childMap = NULL;
-		}
-		else if ( us->kind == Box3DUS_Voxels )
-		{
-			us->voxels.data = NULL;
 		}
 		us->kind = Box3DUS_Free;
 		us->nextFree = ( i + 1 < BOX3D_USER_SHAPE_CAPACITY ) ? ( i + 1 ) : BOX3D_FREELIST_END;
@@ -708,19 +698,24 @@ static void* AdapterCreateDebugShape( const b3DebugShape* debugShape, void* cont
 
 	if ( debugShape->type == b3_voxelShape )
 	{
-		int index = AllocDebugShape();
-		if ( index < 0 )
+		MeshHandle handle = FindOrAddVoxels( debugShape->voxels->data );
+		if ( !IsMeshHandleValid( handle ) )
 		{
 			return NULL;
 		}
 
-		// for the time being, we'll test the voxel shape by just rendering each voxel as a sphere.
-		// This is good enough to test the voxel shape, and we can generate a proper mesh later.
+		int index = AllocDebugShape();
+		if ( index < 0 )
+		{
+			ReleaseMeshReference( handle );
+			return NULL;
+		}
+
 		DebugShape* us = &s_adapter.pool[index];
 		us->kind = Box3DUS_Voxels;
 		PopulateCommonFields( us, debugShape );
-		us->voxels.data = debugShape->voxels->data;
-		us->voxels.scale = debugShape->voxels->scale;
+		us->geom.handle = handle;
+		us->geom.scale = b3Vec3Of( debugShape->voxels->scale );
 
 		return us;
 	}
@@ -755,13 +750,10 @@ static void DestroyDebugShape( void* userShape, void* context )
 		free( us->compound.childMap );
 		us->compound.childMap = NULL;
 	}
-	else if ( us->kind == Box3DUS_Hull || us->kind == Box3DUS_Mesh || us->kind == Box3DUS_HeightField )
+	else if ( us->kind == Box3DUS_Hull || us->kind == Box3DUS_Mesh || us->kind == Box3DUS_HeightField ||
+			  us->kind == Box3DUS_Voxels )
 	{
 		ReleaseMeshReference( us->geom.handle );
-	}
-	else if ( us->kind == Box3DUS_Voxels )
-	{
-		us->voxels.data = NULL;
 	}
 
 	const int index = (int)( us - s_adapter.pool );
@@ -774,71 +766,41 @@ static void DestroyDebugShape( void* userShape, void* context )
 // Alpha applied to non-static shapes when box3dAdapterSetTransparentDynamic is on.
 #define BOX3D_TRANSPARENT_ALPHA 0.5f
 
-typedef struct
-{
-	const DebugShape* us;
-	b3Transform baseTransform;
-	Vec4 color;
-	float metallic;
-	float roughness;
-	TransparentShadowCast shadowCast;
-	HighlightKind hk;
-} AppendContext;
-
-void VoxelSphereAppender( uint64_t code, uint32_t index, void* context )
-{
-	AppendContext* ac = (AppendContext*)context;
-	float x = ( (float)b3DecodeVoxelX( code ) + 0.5f ) * ac->us->voxels.scale;
-	float y = ( (float)b3DecodeVoxelY( code ) + 0.5f ) * ac->us->voxels.scale;
-	float z = ( (float)b3DecodeVoxelZ( code ) + 0.5f ) * ac->us->voxels.scale;
-	b3Vec3 center = { x, y, z };
-	b3Transform transform = { b3TransformPoint( ac->baseTransform, center ), ac->baseTransform.q };
-	AppendSphere( transform, ac->us->voxels.scale / 2.0f, ac->color, ac->metallic, ac->roughness, ac->shadowCast );
-	if ( ac->hk != HIGHLIGHT_KIND_NONE )
-	{
-		AppendHighlightSphere( transform, ac->us->voxels.scale / 2.0f, ac->hk );
-	}
-}
-
 // Emit one resolved primitive at baseTransform. The per-kind offset (sphere
 // center, capsule frame) layers on top of baseTransform, so the same path
 // serves a top-level shape (base = body transform) and a compound child
 // (base = body transform composed with the child transform).
-static void AppendResolvedShape( AppendContext ac )
+static void AppendResolvedShape( const DebugShape* us, b3Transform baseTransform, Vec4 color, float metallic, float roughness,
+								 TransparentShadowCast shadowCast, HighlightKind hk )
 {
-	if ( ac.us->kind == Box3DUS_Sphere )
+	if ( us->kind == Box3DUS_Sphere )
 	{
-		b3Transform transform = { b3TransformPoint( ac.baseTransform, ac.us->sphere.center ), ac.baseTransform.q };
-		AppendSphere( transform, ac.us->sphere.radius, ac.color, ac.metallic, ac.roughness, ac.shadowCast );
-		if ( ac.hk != HIGHLIGHT_KIND_NONE )
+		b3Transform transform = { b3TransformPoint( baseTransform, us->sphere.center ), baseTransform.q };
+		AppendSphere( transform, us->sphere.radius, color, metallic, roughness, shadowCast );
+		if ( hk != HIGHLIGHT_KIND_NONE )
 		{
-			AppendHighlightSphere( transform, ac.us->sphere.radius, ac.hk );
+			AppendHighlightSphere( transform, us->sphere.radius, hk );
 		}
 	}
-	else if ( ac.us->kind == Box3DUS_Capsule )
+	else if ( us->kind == Box3DUS_Capsule )
 	{
-		b3Transform transform = b3MulTransforms( ac.baseTransform, ac.us->capsule.localFrame );
-		AppendCapsule( transform, ac.us->capsule.halfLength, ac.us->capsule.radius, ac.color, ac.metallic, ac.roughness,
-					   ac.shadowCast );
-		if ( ac.hk != HIGHLIGHT_KIND_NONE )
+		b3Transform transform = b3MulTransforms( baseTransform, us->capsule.localFrame );
+		AppendCapsule( transform, us->capsule.halfLength, us->capsule.radius, color, metallic, roughness, shadowCast );
+		if ( hk != HIGHLIGHT_KIND_NONE )
 		{
-			AppendHighlightCapsule( transform, ac.us->capsule.halfLength, ac.us->capsule.radius, ac.hk );
+			AppendHighlightCapsule( transform, us->capsule.halfLength, us->capsule.radius, hk );
 		}
 	}
-	else if ( ac.us->kind == Box3DUS_Hull || ac.us->kind == Box3DUS_Mesh || ac.us->kind == Box3DUS_HeightField )
+	else if ( us->kind == Box3DUS_Hull || us->kind == Box3DUS_Mesh || us->kind == Box3DUS_HeightField ||
+			  us->kind == Box3DUS_Voxels )
 	{
-		MeshMaterialMode mode = ac.us->isGround ? MESH_MATERIAL_MODE_GROUND_GRID : MESH_MATERIAL_MODE_SOLID;
-		float cell = ac.us->isGround ? BOX3D_GROUND_GRID_CELL_SIZE : 0.0f;
-		AppendMesh( ac.us->geom.handle, ac.baseTransform, ac.us->geom.scale, ac.color, ac.metallic, ac.roughness, mode, cell,
-					ac.shadowCast );
-		if ( ac.hk != HIGHLIGHT_KIND_NONE )
+		MeshMaterialMode mode = us->isGround ? MESH_MATERIAL_MODE_GROUND_GRID : MESH_MATERIAL_MODE_SOLID;
+		float cell = us->isGround ? BOX3D_GROUND_GRID_CELL_SIZE : 0.0f;
+		AppendMesh( us->geom.handle, baseTransform, us->geom.scale, color, metallic, roughness, mode, cell, shadowCast );
+		if ( hk != HIGHLIGHT_KIND_NONE )
 		{
-			AppendHighlightGeometry( ac.us->geom.handle, ac.baseTransform, ac.us->geom.scale, ac.hk );
+			AppendHighlightGeometry( us->geom.handle, baseTransform, us->geom.scale, hk );
 		}
-	}
-	else if ( ac.us->kind == Box3DUS_Voxels )
-	{
-		b3IterateVoxels( ac.us->voxels.data, VoxelSphereAppender, &ac );
 	}
 }
 
@@ -875,7 +837,7 @@ static bool CompoundCullCallback( int proxyId, uint64_t userData, void* context 
 	}
 	const DebugShape* child = &s_adapter.pool[slot];
 	b3Transform base = b3MulTransforms( ctx->shapeRelative, child->childTransform );
-	AppendResolvedShape( (AppendContext){ child, base, ctx->color, ctx->metallic, ctx->roughness, ctx->shadowCast, ctx->hk } );
+	AppendResolvedShape( child, base, ctx->color, ctx->metallic, ctx->roughness, ctx->shadowCast, ctx->hk );
 	ctx->appended += 1;
 	return true;
 }
@@ -977,7 +939,7 @@ static void DrawShape( void* userShape, b3WorldTransform shapeTransform, b3HexCo
 			for ( int ci = us->compound.firstChild; ci != -1; ci = s_adapter.pool[ci].nextChild )
 			{
 				b3Transform base = b3MulTransforms( shapeRelative, s_adapter.pool[ci].childTransform );
-				AppendResolvedShape( (AppendContext){ &s_adapter.pool[ci], base, c, metallic, roughness, shadowCast, hk } );
+				AppendResolvedShape( &s_adapter.pool[ci], base, c, metallic, roughness, shadowCast, hk );
 			}
 			s_adapter.lastCompoundAppended += us->compound.childMapCount;
 			s_adapter.lastCompoundTotal += us->compound.childMapCount;
@@ -985,7 +947,7 @@ static void DrawShape( void* userShape, b3WorldTransform shapeTransform, b3HexCo
 	}
 	else
 	{
-		AppendResolvedShape( (AppendContext){ us, shapeRelative, c, metallic, roughness, shadowCast, hk } );
+		AppendResolvedShape( us, shapeRelative, c, metallic, roughness, shadowCast, hk );
 	}
 }
 

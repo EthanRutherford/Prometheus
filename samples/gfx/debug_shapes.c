@@ -3,6 +3,7 @@
 
 #include "gfx/debug_shapes.h"
 
+#include "gfx/bits.h"
 #include "gfx/qsort.h"
 
 #include <assert.h>
@@ -52,6 +53,15 @@ typedef enum EdgeClass
 	EDGE_CONVEX = 1,
 	EDGE_FLAT = 2,
 } EdgeClass;
+
+typedef struct VoxelBitmap
+{
+	b3AABB bounds;
+	b3Vec3 extents;
+	int bitCount;
+	int chunkCount;
+	uint64_t* bits;
+} VoxelBitmap;
 
 // Collapse Box3D's two-bit edge flags to a render class. Concave bit clear
 // means convex, a true convex edge or an open boundary with neither bit.
@@ -265,6 +275,61 @@ static bool EmitFlatTriangle( BuildBuffer* b, b3Vec3 p0, b3Vec3 p1, b3Vec3 p2, b
 
 	b->vertexCount += 3;
 	b->indexCount += 3;
+	return true;
+}
+
+// Append four vertices (one quad) with a shared face normal and add six
+// consecutive indices that reference them. Returns false on OOM.
+// Also emits the four edges of the quad into the edge builder
+static bool EmitFlatQuadWithEdges( BuildBuffer* b, EdgeBuilder* eb, b3Vec3 p0, b3Vec3 p1, b3Vec3 p2, b3Vec3 p3, b3Vec3 normal )
+{
+	if ( !BufferReserveVertices( b, 4 ) || !BufferReserveIndices( b, 6 ) )
+	{
+		return false;
+	}
+
+	MeshVertex* v = &b->vertices[b->vertexCount];
+	v[0].position[0] = p0.x;
+	v[0].position[1] = p0.y;
+	v[0].position[2] = p0.z;
+	v[0].normal[0] = normal.x;
+	v[0].normal[1] = normal.y;
+	v[0].normal[2] = normal.z;
+	v[1].position[0] = p1.x;
+	v[1].position[1] = p1.y;
+	v[1].position[2] = p1.z;
+	v[1].normal[0] = normal.x;
+	v[1].normal[1] = normal.y;
+	v[1].normal[2] = normal.z;
+	v[2].position[0] = p2.x;
+	v[2].position[1] = p2.y;
+	v[2].position[2] = p2.z;
+	v[2].normal[0] = normal.x;
+	v[2].normal[1] = normal.y;
+	v[2].normal[2] = normal.z;
+	v[3].position[0] = p3.x;
+	v[3].position[1] = p3.y;
+	v[3].position[2] = p3.z;
+	v[3].normal[0] = normal.x;
+	v[3].normal[1] = normal.y;
+	v[3].normal[2] = normal.z;
+
+	const uint32_t base = (uint32_t)b->vertexCount;
+	b->indices[b->indexCount + 0] = base + 0u;
+	b->indices[b->indexCount + 1] = base + 1u;
+	b->indices[b->indexCount + 2] = base + 2u;
+	b->indices[b->indexCount + 3] = base + 0u;
+	b->indices[b->indexCount + 4] = base + 2u;
+	b->indices[b->indexCount + 5] = base + 3u;
+
+	b->vertexCount += 4;
+	b->indexCount += 6;
+
+	EmitEdge( eb, base + 0u, base + 1u, 0u );
+	EmitEdge( eb, base + 1u, base + 2u, 0u );
+	EmitEdge( eb, base + 2u, base + 3u, 0u );
+	EmitEdge( eb, base + 3u, base + 0u, 0u );
+
 	return true;
 }
 
@@ -569,7 +634,7 @@ static MeshHandle BuildHeightField( const b3HeightFieldData* hf )
 	const int cols = hf->columnCount;
 	const int rows = hf->rowCount;
 	const uint8_t* materials = b3GetHeightFieldMaterialIndices( hf ); // may be NULL if all solid
-	const uint8_t* edgeFlags = b3GetHeightFieldFlags( hf );			 // per-triangle concave bits
+	const uint8_t* edgeFlags = b3GetHeightFieldFlags( hf );			  // per-triangle concave bits
 	const bool clockwise = hf->clockwise;
 
 	// Build a (rows x cols) grid vertex array up front. Triangle emission
@@ -789,6 +854,250 @@ static MeshHandle BuildHeightField( const b3HeightFieldData* hf )
 	return h;
 }
 
+void VoxelBitmapper( uint64_t code, uint32_t index, void* context )
+{
+	VoxelBitmap* bitmap = (VoxelBitmap*)context;
+	int x = b3DecodeVoxelX( code ) - bitmap->bounds.lowerBound.x;
+	int y = b3DecodeVoxelY( code ) - bitmap->bounds.lowerBound.y;
+	int z = b3DecodeVoxelZ( code ) - bitmap->bounds.lowerBound.z;
+
+	int bitIndex = ( z * bitmap->extents.y + y ) * bitmap->extents.x + x;
+	int chunkIndex = bitIndex / 64;
+	int bitOffset = bitIndex % 64;
+
+	bitmap->bits[chunkIndex] |= ( 1ull << bitOffset );
+}
+
+static MeshHandle BuildVoxels( const b3VoxelData* voxelData )
+{
+	if ( voxelData->voxelCount <= 0 )
+	{
+		fprintf( stderr, "error: voxel volume missing arrays or empty (hash=0x%08x)\n", voxelData->hash );
+		return InvalidMeshHandle();
+	}
+
+	// Build a bitfield of all occupied voxels. This is used to detect internal faces that can be culled.
+	VoxelBitmap bitmap = { 0 };
+	bitmap.bounds = voxelData->bounds;
+	bitmap.extents = b3Sub( bitmap.bounds.upperBound, bitmap.bounds.lowerBound );
+	bitmap.bitCount = (int)( bitmap.extents.x * bitmap.extents.y * bitmap.extents.z );
+	bitmap.chunkCount = (int)( ( bitmap.bitCount + 63 ) / 64 );
+	bitmap.bits = malloc( bitmap.chunkCount * sizeof( uint64_t ) );
+	memset( bitmap.bits, 0, bitmap.chunkCount * sizeof( uint64_t ) );
+	b3IterateVoxels( voxelData, VoxelBitmapper, &bitmap );
+
+	// Iterate the bitfield and emit a quad for each exposed face. This is a naive greedy meshing approach
+	// that does not merge adjacent quads, but it is sufficient for visualization purposes.
+	BuildBuffer buf = { 0 };
+	EdgeBuilder eb = { 0 };
+	for ( int i = 0; i < bitmap.chunkCount; i++ )
+	{
+		if ( bitmap.bits[i] == 0 )
+			continue;
+
+		uint64_t chunkBits = bitmap.bits[i];
+
+		while ( chunkBits != 0 )
+		{
+			int bitIndex = lsb_64( chunkBits );
+			int globalBitIndex = i * 64 + bitIndex;
+			chunkBits &= ~( 1ull << bitIndex );
+
+			// Convert the global bit index to 3D coordinates in the voxel space.
+			float x = (float)( globalBitIndex % (int)bitmap.extents.x ) + bitmap.bounds.lowerBound.x;
+			float y = (float)( ( globalBitIndex / (int)bitmap.extents.x ) % (int)bitmap.extents.y ) + bitmap.bounds.lowerBound.y;
+			float z = (float)( globalBitIndex / ( (int)bitmap.extents.x * (int)bitmap.extents.y ) ) + bitmap.bounds.lowerBound.z;
+
+			float minx = bitmap.bounds.lowerBound.x;
+			float miny = bitmap.bounds.lowerBound.y;
+			float minz = bitmap.bounds.lowerBound.z;
+			float maxx = bitmap.bounds.upperBound.x;
+			float maxy = bitmap.bounds.upperBound.y;
+			float maxz = bitmap.bounds.upperBound.z;
+
+			int plusXIndex = x >= maxx - 1.0f ? bitmap.bitCount : globalBitIndex + 1;
+			int minusXIndex = x <= minx ? -1 : globalBitIndex - 1;
+			int plusYIndex = y >= maxy - 1.0f ? bitmap.bitCount : globalBitIndex + (int)bitmap.extents.x;
+			int minusYIndex = y <= miny ? -1 : globalBitIndex - (int)bitmap.extents.x;
+			int plusZIndex = z >= maxz - 1.0f ? bitmap.bitCount : globalBitIndex + (int)bitmap.extents.x * (int)bitmap.extents.y;
+			int minusZIndex = z <= minz ? -1 : globalBitIndex - (int)bitmap.extents.x * (int)bitmap.extents.y;
+
+			// positive x face
+			if ( plusXIndex >= bitmap.bitCount || !( bitmap.bits[plusXIndex / 64] & ( 1ull << ( plusXIndex % 64 ) ) ) )
+			{
+				if ( !EmitFlatQuadWithEdges( &buf, &eb, (b3Vec3){ x + 1.0f, y, z }, (b3Vec3){ x + 1.0f, y + 1.0f, z },
+											 (b3Vec3){ x + 1.0f, y + 1.0f, z + 1.0f }, (b3Vec3){ x + 1.0f, y, z + 1.0f },
+											 (b3Vec3){ 1.0f, 0.0f, 0.0f } ) )
+				{
+					BufferFree( &buf );
+					EdgeBuilderFree( &eb );
+					free( bitmap.bits );
+					return InvalidMeshHandle();
+				}
+			}
+
+			// negative x face
+			if ( minusXIndex < 0 || !( bitmap.bits[minusXIndex / 64] & ( 1ull << ( minusXIndex % 64 ) ) ) )
+			{
+				if ( !EmitFlatQuadWithEdges( &buf, &eb, (b3Vec3){ x, y, z }, (b3Vec3){ x, y, z + 1.0f },
+											 (b3Vec3){ x, y + 1.0f, z + 1.0f }, (b3Vec3){ x, y + 1.0f, z },
+											 (b3Vec3){ -1.0f, 0.0f, 0.0f } ) )
+				{
+					BufferFree( &buf );
+					EdgeBuilderFree( &eb );
+					free( bitmap.bits );
+					return InvalidMeshHandle();
+				}
+			}
+
+			// positive y face
+			if ( plusYIndex >= bitmap.bitCount || !( bitmap.bits[plusYIndex / 64] & ( 1ull << ( plusYIndex % 64 ) ) ) )
+			{
+				if ( !EmitFlatQuadWithEdges( &buf, &eb, (b3Vec3){ x, y + 1.0f, z }, (b3Vec3){ x, y + 1.0f, z + 1.0f },
+											 (b3Vec3){ x + 1.0f, y + 1.0f, z + 1.0f }, (b3Vec3){ x + 1.0f, y + 1.0f, z },
+											 (b3Vec3){ 0.0f, 1.0f, 0.0f } ) )
+				{
+					BufferFree( &buf );
+					EdgeBuilderFree( &eb );
+					free( bitmap.bits );
+					return InvalidMeshHandle();
+				}
+			}
+
+			// negative y face
+			if ( minusYIndex < 0 || !( bitmap.bits[minusYIndex / 64] & ( 1ull << ( minusYIndex % 64 ) ) ) )
+			{
+				if ( !EmitFlatQuadWithEdges( &buf, &eb, (b3Vec3){ x, y, z }, (b3Vec3){ x + 1.0f, y, z },
+											 (b3Vec3){ x + 1.0f, y, z + 1.0f }, (b3Vec3){ x, y, z + 1.0f },
+											 (b3Vec3){ 0.0f, -1.0f, 0.0f } ) )
+				{
+					BufferFree( &buf );
+					EdgeBuilderFree( &eb );
+					free( bitmap.bits );
+					return InvalidMeshHandle();
+				}
+			}
+
+			// positive z face
+			if ( plusZIndex >= bitmap.bitCount || !( bitmap.bits[plusZIndex / 64] & ( 1ull << ( plusZIndex % 64 ) ) ) )
+			{
+				if ( !EmitFlatQuadWithEdges( &buf, &eb, (b3Vec3){ x, y, z + 1.0f }, (b3Vec3){ x + 1.0f, y, z + 1.0f },
+											 (b3Vec3){ x + 1.0f, y + 1.0f, z + 1.0f }, (b3Vec3){ x, y + 1.0f, z + 1.0f },
+											 (b3Vec3){ 0.0f, 0.0f, 1.0f } ) )
+				{
+					BufferFree( &buf );
+					EdgeBuilderFree( &eb );
+					free( bitmap.bits );
+					return InvalidMeshHandle();
+				}
+			}
+
+			// negative z face
+			if ( minusZIndex < 0 || !( bitmap.bits[minusZIndex / 64] & ( 1ull << ( minusZIndex % 64 ) ) ) )
+			{
+				if ( !EmitFlatQuadWithEdges( &buf, &eb, (b3Vec3){ x, y, z }, (b3Vec3){ x, y + 1.0f, z },
+											 (b3Vec3){ x + 1.0f, y + 1.0f, z }, (b3Vec3){ x + 1.0f, y, z },
+											 (b3Vec3){ 0.0f, 0.0f, -1.0f } ) )
+				{
+					BufferFree( &buf );
+					EdgeBuilderFree( &eb );
+					free( bitmap.bits );
+					return InvalidMeshHandle();
+				}
+			}
+		}
+	}
+
+	if ( buf.indexCount == 0 )
+	{
+
+		EdgeBuilderFree( &eb );
+		BufferFree( &buf );
+		free( bitmap.bits );
+		return InvalidMeshHandle();
+	}
+
+	// Sort + unique on the canonicalized (v0, v1) key. svpv/qsort macro
+	// inlines the comparator and swap so this is fast even for very dense
+	// meshes, runs once at acquire, not per frame.
+	if ( eb.count > 1 )
+	{
+#define LESS( i, j ) MeshEdgeLess( &eb.edges[(int)( i )], &eb.edges[(int)( j )] )
+#define SWAP( i, j )                                                                                                             \
+	do                                                                                                                           \
+	{                                                                                                                            \
+		EdgeRecord tmp_ = eb.edges[(int)( i )];                                                                                  \
+		eb.edges[(int)( i )] = eb.edges[(int)( j )];                                                                             \
+		eb.edges[(int)( j )] = tmp_;                                                                                             \
+	}                                                                                                                            \
+	while ( 0 )
+
+		QSORT( eb.count, LESS, SWAP );
+#undef LESS
+#undef SWAP
+
+		// In-place unique. Two records compare equal when (v0, v1) match.
+		// On a flag tie the higher-rank class wins so the overlay renders the
+		// edge in the more prominent color when the two triangles' bits
+		// disagree (rare but possible at non-manifold joints).
+		int write = 0;
+		for ( int read = 1; read < eb.count; ++read )
+		{
+			EdgeRecord* w = &eb.edges[write];
+			EdgeRecord* r = &eb.edges[read];
+			if ( w->v0 == r->v0 && w->v1 == r->v1 )
+			{
+				if ( EdgeClassRank( r->flags ) > EdgeClassRank( w->flags ) )
+				{
+					w->flags = r->flags;
+				}
+			}
+			else
+			{
+				++write;
+				eb.edges[write] = *r;
+			}
+		}
+		eb.count = write + 1;
+	}
+
+	const MeshHandle h =
+		RegisterMesh( voxelData->hash, buf.vertices, buf.vertexCount, buf.indices, buf.indexCount, "geom_voxels" );
+
+	if ( IsMeshHandleValid( h ) )
+	{
+		SetMeshKind( h, MESH_KIND_VOXELS );
+		if ( eb.count > 0 )
+		{
+			// generate the vertex array for the edge upload. VoxelData does not have a
+			// vertex array, so we use the vertex positions from the build buffer.
+			b3Vec3* verts = (b3Vec3*)malloc( (size_t)buf.vertexCount * sizeof( b3Vec3 ) );
+			if ( verts )
+			{
+				for ( int i = 0; i < buf.vertexCount; ++i )
+				{
+					float* p = buf.vertices[i].position;
+					verts[i] = (b3Vec3){ p[0], p[1], p[2] };
+				}
+
+				EdgeVertex* upload = ExpandEdgesForUpload( eb.edges, eb.count, verts );
+				if ( upload )
+				{
+					RegisterMeshEdges( h, upload, eb.count, "geom_mesh_edges" );
+					free( upload );
+				}
+
+				free( verts );
+			}
+		}
+	}
+
+	EdgeBuilderFree( &eb );
+	BufferFree( &buf );
+	free( bitmap.bits );
+	return h;
+}
+
 MeshHandle FindOrAddHull( const b3HullData* hull )
 {
 	if ( !hull || hull->hash == 0u )
@@ -836,4 +1145,21 @@ MeshHandle FindOrAddHeightField( const b3HeightFieldData* heightField )
 		return existing;
 	}
 	return BuildHeightField( heightField );
+}
+
+MeshHandle FindOrAddVoxels( const b3VoxelData* voxelData )
+{
+	if ( !voxelData || voxelData->hash == 0u )
+	{
+		return InvalidMeshHandle();
+	}
+
+	MeshHandle existing = FindMesh( voxelData->hash );
+	if ( IsMeshHandleValid( existing ) )
+	{
+		AddMeshReference( existing );
+		return existing;
+	}
+
+	return BuildVoxels( voxelData );
 }

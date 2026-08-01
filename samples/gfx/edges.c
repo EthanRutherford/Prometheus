@@ -4,9 +4,10 @@
 #include "gfx/edges.h"
 
 #include "edge.glsl.h"
-#include "box3d/types.h"
 #include "gfx/geometry_registry.h"
 #include "gfx/scene_target.h"
+
+#include "box3d/types.h"
 
 // Two pipelines off the same shader:
 
@@ -35,6 +36,7 @@ EdgeOverlayParams GetDefaultEdgeParams( void )
 	p.showHulls = true;
 	p.showMeshes = true;
 	p.showHeightfields = true;
+	p.showVoxels = true;
 	p.showEdgeConvexity = false;
 	p.thicknessPx = 1.5f;
 	p.zBias = 1.0e-6f;
@@ -124,6 +126,8 @@ static bool IsBatchEnabled( const MeshEdgeBatch* b, const EdgeOverlayParams* p )
 			return p->showMeshes;
 		case MESH_KIND_HEIGHTFIELD:
 			return p->showHeightfields;
+		case MESH_KIND_VOXELS:
+			return p->showVoxels;
 		case MESH_KIND_UNKNOWN:
 		default:
 			return false;

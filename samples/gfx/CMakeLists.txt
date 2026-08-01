@@ -1,6 +1,7 @@
 set(GFX_FILES
     arena.c
     arena.h
+    bits.h
     debug_adapter.c
     debug_adapter.h
     debug_shapes.c

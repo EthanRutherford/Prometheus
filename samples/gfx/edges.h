@@ -37,6 +37,7 @@ typedef struct EdgeOverlayParams
 	bool showHulls;
 	bool showMeshes;
 	bool showHeightfields;
+	bool showVoxels;
 	bool showEdgeConvexity;
 	float thicknessPx;
 	float zBias;	  // reverse-Z nudge toward camera, ~5e-5 is a good start

@@ -2629,6 +2629,9 @@ typedef struct b3VoxelData
 	/// The total number of bytes for this voxel data.
 	uint32_t byteCount;
 
+	/// Hash of this voxel volume (this field is zero when the hash is computed)
+	uint32_t hash;
+
 	/// The local axis-aligned bounding box of the voxel volume.
 	b3AABB bounds;
 
