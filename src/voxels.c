@@ -25,7 +25,7 @@ static uint32_t attrSize = sizeof( b3VoxelAttrs );
 // But I would walk 500 miles, and I would walk 500 more...
 #define B3_MAX_TREE_HEIGHT 12
 
-#define sign(x) ((x > 0) - (x < 0))
+#define sign( x ) ( ( x > 0 ) - ( x < 0 ) )
 
 /// Voxel coordinate encoding and decoding
 
@@ -180,7 +180,7 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 
 	uint32_t height = treeHeight;
 	stack[height].node = (b3VoxelNode*)( nodeStart );
-	stack[height].node->childrenOffset = 1 * nodeSize;
+	stack[height].node->childrenOffset = treeHeight == 0 ? 0 : 1 * nodeSize;
 	for ( int i = 0; i < def->voxelCount; )
 	{
 		// walk down tree until leaf node, creating intermediate nodes along the way.
@@ -286,6 +286,8 @@ b3MassData b3ComputeVoxelMass( const b3Voxels* shape, float baseDensity, b3Surfa
 		context.massData.inertia = b3AddMM( context.massData.inertia, inertia );
 	}
 
+	b3Free( context.voxelMasses, shape->data->voxelCount * sizeof( b3MassData ) );
+
 	return context.massData;
 }
 
@@ -305,6 +307,7 @@ b3AABB b3ComputeVoxelAABB( const b3Voxels* shape, b3Transform transform )
 bool b3OverlapVoxels( const b3Voxels* shape, b3Transform shapeTransform, const b3ShapeProxy* proxy )
 {
 	// TODO: implement
+	printf( "b3OverlapVoxels: not implemented\n" );
 	return false;
 }
 
@@ -466,10 +469,12 @@ b3CastOutput b3RayCastVoxels( const b3Voxels* shape, const b3RayCastInput* input
 	return output;
 }
 
-b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* input ) {
+b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* input )
+{
 	b3CastOutput output = { 0 };
 
 	// TODO: implement
+	printf( "b3ShapeCastVoxels: not implemented\n" );
 
 	return output;
 }
@@ -477,6 +482,7 @@ b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* i
 int b3CollideMoverAndVoxels( b3PlaneResult* results, int capacity, const b3Voxels* shape, const b3Capsule* mover )
 {
 	// TODO: implement
+	printf( "b3CollideMoverAndVoxels: not implemented\n" );
 	return 0;
 }
 
