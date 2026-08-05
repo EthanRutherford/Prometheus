@@ -990,7 +990,7 @@ B3_API void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Ve
 /// Allows you to change a shape to be a voxel volume or update the current voxel volume.
 /// This does not modify the mass properties.
 /// @see b3Body_ApplyMassFromShapes
-B3_API void b3Shape_SetVoxels( b3ShapeId shapeId, const b3Voxels* voxels );
+B3_API void b3Shape_SetVoxels( b3ShapeId shapeId, const b3VoxelData* voxels, float scale );
 
 /// Get the maximum capacity required for retrieving all the touching contacts on a shape
 B3_API int b3Shape_GetContactCapacity( b3ShapeId shapeId );

@@ -450,16 +450,17 @@ b3ShapeId b3CreateBakedCompoundShape( b3BodyId bodyId, b3ShapeDef* def, const b3
 
 b3ShapeId b3CreateVoxelShape( b3BodyId bodyId, const b3ShapeDef* def, const b3VoxelData* voxels, float scale )
 {
+	B3_VALIDATE( voxels != NULL );
+	B3_VALIDATE( scale > 0 );
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, voxels, b3_voxelShape, b3Transform_identity, b3Vec3Of( scale ), false );
 	if ( shapeId.index1 != 0 )
 	{
 		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
 		if ( world != NULL && world->recording != NULL )
 		{
-			// TODO: implement voxel recording.
-			// uint32_t geometryId = b3RecInternVoxels( world->recording, voxels );
-			// b3RecArgs_CreateVoxelShape createArgs = { bodyId, *def, geometryId, scale };
-			// b3RecWriteRet_CreateVoxelShape( world->recording, &createArgs, shapeId );
+			uint32_t geometryId = b3RecInternVoxels( world->recording, voxels );
+			b3RecArgs_CreateVoxelShape createArgs = { bodyId, *def, geometryId, scale };
+			b3RecWriteRet_CreateVoxelShape( world->recording, &createArgs, shapeId );
 		}
 	}
 	return shapeId;
@@ -1760,9 +1761,10 @@ void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Vec3 scal
 	world->locked = false;
 }
 
-void b3Shape_SetVoxels( b3ShapeId shapeId, const b3Voxels* voxels )
+void b3Shape_SetVoxels( b3ShapeId shapeId, const b3VoxelData* voxels, float scale )
 {
 	B3_ASSERT( voxels != NULL /* && b3IsValidVoxels( voxels ) */ );
+	B3_ASSERT( scale > 0 );
 
 	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
 	if ( world == NULL )
@@ -1774,17 +1776,17 @@ void b3Shape_SetVoxels( b3ShapeId shapeId, const b3Voxels* voxels )
 
 	if ( world->recording != NULL )
 	{
-		// TODO: implement voxel recording
-		// uint32_t geometryId = b3RecInternVoxels( world->recording, voxels );
-		// b3RecArgs_ShapeSetVoxels setArgs = { shapeId, geometryId };
-		// b3RecWrite_ShapeSetVoxels( world->recording, &setArgs );
+		uint32_t geometryId = b3RecInternVoxels( world->recording, voxels );
+		b3RecArgs_ShapeSetVoxels setArgs = { shapeId, geometryId, scale };
+		b3RecWrite_ShapeSetVoxels( world->recording, &setArgs );
 	}
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 
 	b3DestroyShapeAllocationForShapeChange( world, shape );
 
-	shape->voxels = *voxels;
+	shape->voxels.data = voxels;
+	shape->voxels.scale = scale;
 	shape->type = b3_voxelShape;
 	shape->aabbMargin = b3ComputeShapeMargin( shape );
 

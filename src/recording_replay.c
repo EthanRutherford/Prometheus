@@ -1080,6 +1080,27 @@ static void b3RecDispatch_CreateCompoundShape( const b3RecArgs_CreateCompoundSha
 	b3RecCheckShapeId( rdr, gotId, recId );
 }
 
+static void b3RecDispatch_CreateVoxelShape( const b3RecArgs_CreateVoxelShape* a, b3RecReader* rdr )
+{
+	b3ShapeId recId = b3RecR_SHAPEID( rdr );
+	if ( !rdr->ok )
+	{
+		return;
+	}
+	uint32_t id = a->geometryId;
+	if ( id >= (uint32_t)rdr->slotCount )
+	{
+		printf( "b3ReplayFile: voxel geometryId %u out of range\n", id );
+		rdr->ok = false;
+		return;
+	}
+	b3RegistrySlot* slot = rdr->slots + id;
+	const b3VoxelData* voxel = (const b3VoxelData*)slot->bytes;
+	b3BodyId bodyId = b3RecMakeBodyId( rdr, a->body );
+	b3ShapeId gotId = b3CreateVoxelShape( bodyId, &a->def, voxel, a->scale );
+	b3RecCheckShapeId( rdr, gotId, recId );
+}
+
 static void b3RecDispatch_DestroyShape( const b3RecArgs_DestroyShape* a, b3RecReader* rdr )
 {
 	b3DestroyShape( b3RecMakeShapeId( rdr, a->shape ), a->updateBodyMass );
@@ -1177,6 +1198,21 @@ static void b3RecDispatch_ShapeSetMesh( const b3RecArgs_ShapeSetMesh* a, b3RecRe
 	b3ShapeId shapeId = b3RecMakeShapeId( rdr, a->shape );
 	const b3MeshData* mesh = b3RecGetLiveMesh( slot );
 	b3Shape_SetMesh( shapeId, mesh, a->scale );
+}
+
+static void b3RecDispatch_ShapeSetVoxels( const b3RecArgs_ShapeSetVoxels* a, b3RecReader* rdr )
+{
+	uint32_t id = a->geometryId;
+	if ( id >= (uint32_t)rdr->slotCount )
+	{
+		printf( "b3ReplayFile: voxel geometryId %u out of range\n", id );
+		rdr->ok = false;
+		return;
+	}
+	b3RegistrySlot* slot = rdr->slots + id;
+	b3ShapeId shapeId = b3RecMakeShapeId( rdr, a->shape );
+	const b3VoxelData* voxels = (const b3VoxelData*)slot->bytes;
+	b3Shape_SetVoxels( shapeId, voxels, a->scale );
 }
 
 static void b3RecDispatch_ShapeApplyWind( const b3RecArgs_ShapeApplyWind* a, b3RecReader* rdr )
