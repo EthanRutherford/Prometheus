@@ -492,7 +492,11 @@ typedef void b3VoxelIteratorFcn( uint64_t code, uint32_t index, void* context );
 /// Iterate over all voxels in a voxel shape. The callback is called for each voxel that is present in the shape.
 B3_API void b3IterateVoxels( const b3VoxelData* voxels, b3VoxelIteratorFcn* fcn, void* context );
 
-/// Get read only voxel attributes. 
+/// Query a voxel shape for voxels that overlap an AABB. The callback is called for each voxel that overlaps the AABB.
+/// Note: the AABB is assumed to be in voxel space, so be sure to scale it properly by the desired voxel size.
+B3_API void b3QueryVoxels( const b3VoxelData* voxels, b3AABB aabb, b3VoxelIteratorFcn* fcn, void* context );
+
+/// Get read only voxel attributes.
 B3_INLINE const b3VoxelAttrs* b3GetVoxelAttrs( const b3VoxelData* voxels )
 {
 	if ( voxels->voxelOffset == 0 )

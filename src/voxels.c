@@ -486,7 +486,7 @@ int b3CollideMoverAndVoxels( b3PlaneResult* results, int capacity, const b3Voxel
 	return 0;
 }
 
-// Voxel iterator
+// Voxel iterators
 
 void b3IterateVoxels( const b3VoxelData* voxels, b3VoxelIteratorFcn* fcn, void* context )
 {
@@ -515,7 +515,7 @@ void b3IterateVoxels( const b3VoxelData* voxels, b3VoxelIteratorFcn* fcn, void* 
 
 		uint32_t bitIndex = countr_zero_64( stack[height].occupancy );
 		stack[height].occupancy &= ~( 1ULL << bitIndex );
-		uint64_t code = ( stack[height].code << 6 ) | bitIndex;
+		uint64_t code = stack[height].code | ( (uint64_t)bitIndex << ( height * 6 ) );
 		uint32_t childrenOffset = stack[height].node->childrenOffset;
 		uint32_t childIndex = popcount_64( stack[height].node->occupancy & ( ( 1ULL << bitIndex ) - 1 ) );
 
@@ -530,7 +530,130 @@ void b3IterateVoxels( const b3VoxelData* voxels, b3VoxelIteratorFcn* fcn, void* 
 				(const b3VoxelNode*)( nodeStart + childrenOffset + childIndex * sizeof( b3VoxelNode ) );
 			stack[--height].node = childNode;
 			stack[height].occupancy = childNode->occupancy;
-			stack[height].code = ( stack[height + 1].code << 6 ) | bitIndex;
+			stack[height].code = code;
+		}
+	}
+}
+
+typedef struct ui3
+{
+	// 3D unsigned integer vector
+	uint32_t x, y, z;
+} ui3;
+
+uint64_t filterOccupancy( uint64_t occupancy, ui3 node, ui3 lower, ui3 upper, int height )
+{
+	// LUTS for filtering occupancy bits based on the min and max bounds of the query AABB.
+	// The values in the LUTs represent all bits that are valid for the given min and max of that axis.
+	// AND-ing these together results in a mask where only bits that are inside the query bounds are 1.
+	static const uint64_t LUT_X[4][4] = {
+		// max = 0               max = 1               max = 2               max = 3
+		{ 0x1111111111111111ULL, 0x3333333333333333ULL, 0x7777777777777777ULL, 0xFFFFFFFFFFFFFFFFULL }, // min = 0
+		{ 0x0000000000000000ULL, 0x2222222222222222ULL, 0x6666666666666666ULL, 0xEEEEEEEEEEEEEEEEULL }, // min = 1
+		{ 0x0000000000000000ULL, 0x0000000000000000ULL, 0x4444444444444444ULL, 0xCCCCCCCCCCCCCCCCULL }, // min = 2
+		{ 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0x8888888888888888ULL }	// min = 3
+	};
+	static const uint64_t LUT_Y[4][4] = {
+		// max = 0               max = 1               max = 2               max = 3
+		{ 0x000F000F000F000FULL, 0x00FF00FF00FF00FFULL, 0x0FFF0FFF0FFF0FFFULL, 0xFFFFFFFFFFFFFFFFULL }, // min = 0
+		{ 0x0000000000000000ULL, 0x00F000F000F000F0ULL, 0x0FF00FF00FF00FF0ULL, 0xFFF0FFF0FFF0FFF0ULL }, // min = 1
+		{ 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0F000F000F000F00ULL, 0xFF00FF00FF00FF00ULL }, // min = 2
+		{ 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0xF000F000F000F000ULL }	// min = 3
+	};
+	static const uint64_t LUT_Z[4][4] = {
+		// max = 0               max = 1               max = 2               max = 3
+		{ 0x000000000000FFFFULL, 0x00000000FFFFFFFFULL, 0x0000FFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL }, // min = 0
+		{ 0x0000000000000000ULL, 0x00000000FFFF0000ULL, 0x0000FFFFFFFF0000ULL, 0xFFFFFFFFFFFF0000ULL }, // min = 1
+		{ 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000FFFF00000000ULL, 0xFFFFFFFF00000000ULL }, // min = 2
+		{ 0x0000000000000000ULL, 0x0000000000000000ULL, 0x0000000000000000ULL, 0xFFFF000000000000ULL }	// min = 3
+	};
+
+	// compute the min and max values for the node at this height
+	ui3 nodeMin = { node.x >> ( height * 2 ), node.y >> ( height * 2 ), node.z >> ( height * 2 ) };
+	ui3 nodeMax = { nodeMin.x + 3, nodeMin.y + 3, nodeMin.z + 3 };
+	ui3 localLower = { lower.x >> ( height * 2 ), lower.y >> ( height * 2 ), lower.z >> ( height * 2 ) };
+	ui3 localUpper = { upper.x >> ( height * 2 ), upper.y >> ( height * 2 ), upper.z >> ( height * 2 ) };
+	ui3 localMin = { max( nodeMin.x, localLower.x ) & 0x3, max( nodeMin.y, localLower.y ) & 0x3,
+					 max( nodeMin.z, localLower.z ) & 0x3 };
+	ui3 localMax = { min( nodeMax.x, localUpper.x ) & 0x3, min( nodeMax.y, localUpper.y ) & 0x3,
+					 min( nodeMax.z, localUpper.z ) & 0x3 };
+
+	// index the LUTs by the local min and max values to get the occupancy masks for each axis
+	uint64_t xMask = LUT_X[localMin.x][localMax.x];
+	uint64_t yMask = LUT_Y[localMin.y][localMax.y];
+	uint64_t zMask = LUT_Z[localMin.z][localMax.z];
+
+	// combine the masks and filter the occupancy bits
+	return occupancy & xMask & yMask & zMask;
+}
+
+void b3QueryVoxels( const b3VoxelData* voxels, b3AABB query, b3VoxelIteratorFcn* fcn, void* context )
+{
+	// this is practically the same as b3IterateVoxels, except we use some really sick bit manipulation
+	// to filter the occupancy bits based on the query bounds. This makes the query operation extremely
+	// efficient, since we only visit the nodes that are actually relevant to the query, and we do zero
+	// actual geometric intersection tests. The rest of the method is identical to b3IterateVoxels, simply
+	// walking the tree based on the occupancy bits, and calling the callback for each voxel that is found.
+	// This makes the only added cost vs b3IterateVoxels the computation of the occupancy filter, which is
+	// extremely fast, with no branching and only a handful of luts and bitwise operations, which is
+	// called once per node. This results in a query operation roughly O(n * log64(n)). That log64(n) is the
+	// height of the tree, which grows extremely slowly, which makes the runtime practically linear, with n
+	// being the number of voxels in the query bounds. This is substantially faster than even a highly
+	// optimized traditional BVH query using successive AABB intersection tests.
+
+	// define the bounds in voxel coordinates
+	b3Vec3 lowerBound = b3Max( b3Floor( query.lowerBound ), voxels->bounds.lowerBound );
+	b3Vec3 upperBound = b3Sub( b3Min( b3Ceil( query.upperBound ), voxels->bounds.upperBound ), b3Vec3Of( 1.0f ) );
+	ui3 lower = { (uint32_t)lowerBound.x, (uint32_t)lowerBound.y, (uint32_t)lowerBound.z };
+	ui3 upper = { (uint32_t)upperBound.x, (uint32_t)upperBound.y, (uint32_t)upperBound.z };
+
+	typedef struct StackFrame
+	{
+		const b3VoxelNode* node;
+		uint64_t occupancy;
+		uint64_t code;
+		ui3 pos;
+	} StackFrame;
+
+	StackFrame stack[B3_MAX_TREE_HEIGHT];
+	memset( stack, 0, sizeof( stack ) );
+
+	uint8_t* nodeStart = (uint8_t*)voxels + voxels->nodeOffset;
+	uint32_t height = voxels->treeHeight;
+	stack[height].node = (const b3VoxelNode*)( (const uint8_t*)voxels + voxels->nodeOffset );
+	stack[height].occupancy = filterOccupancy( stack[height].node->occupancy, stack[height].pos, lower, upper, height );
+	while ( height <= voxels->treeHeight )
+	{
+		if ( stack[height].occupancy == 0 )
+		{
+			height++;
+			continue;
+		}
+
+		uint32_t bitIndex = countr_zero_64( stack[height].occupancy );
+		stack[height].occupancy &= ~( 1ULL << bitIndex );
+		uint64_t code = stack[height].code | ( (uint64_t)bitIndex << ( height * 6 ) );
+		uint32_t childrenOffset = stack[height].node->childrenOffset;
+		uint32_t childIndex = popcount_64( stack[height].node->occupancy & ( ( 1ULL << bitIndex ) - 1 ) );
+
+		if ( height == 0 )
+		{
+			uint32_t index = ( childrenOffset / attrSize ) + childIndex;
+			fcn( code, index, context );
+		}
+		else
+		{
+			ui3 pos = stack[height].pos;
+			pos.x |= ( ( bitIndex >> 0 ) & 0x3 ) << ( height * 2 );
+			pos.y |= ( ( bitIndex >> 2 ) & 0x3 ) << ( height * 2 );
+			pos.z |= ( ( bitIndex >> 4 ) & 0x3 ) << ( height * 2 );
+
+			const b3VoxelNode* childNode =
+				(const b3VoxelNode*)( nodeStart + childrenOffset + childIndex * sizeof( b3VoxelNode ) );
+			stack[--height].node = childNode;
+			stack[height].occupancy = filterOccupancy( childNode->occupancy, pos, lower, upper, height );
+			stack[height].code = code;
+			stack[height].pos = pos;
 		}
 	}
 }
