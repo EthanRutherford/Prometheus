@@ -507,6 +507,21 @@ B3_INLINE const b3VoxelAttrs* b3GetVoxelAttrs( const b3VoxelData* voxels )
 	return (const b3VoxelAttrs*)( (intptr_t)voxels + voxels->voxelOffset );
 }
 
+/// Create an empty voxel bitmap with the given bounds.
+B3_API b3VoxelBitmap b3CreateVoxelBitmap( b3AABB bounds );
+
+/// Destroy a voxel bitmap.
+B3_API void b3DestroyVoxelBitmap( b3VoxelBitmap* bitmap );
+
+/// Set a voxel in the bitmap. The voxel coordinates must be within the bounds of the bitmap.
+B3_API void b3SetVoxelInBitmap( b3VoxelBitmap* bitmap, uint32_t x, uint32_t y, uint32_t z );
+
+/// Clear a voxel in the bitmap. The voxel coordinates must be within the bounds of the bitmap.
+B3_API void b3ClearVoxelInBitmap( b3VoxelBitmap* bitmap, uint32_t x, uint32_t y, uint32_t z );
+
+/// Get a voxel in the bitmap. The voxel coordinates must be within the bounds of the bitmap.
+B3_API bool b3IsVoxelInBitmap( const b3VoxelBitmap* bitmap, uint32_t x, uint32_t y, uint32_t z );
+
 /**@}*/ // voxels
 
 /**

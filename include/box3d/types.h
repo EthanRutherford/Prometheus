@@ -2615,7 +2615,31 @@ typedef struct b3VoxelNode
 	uint32_t childrenOffset;
 } b3VoxelNode;
 
-typedef struct b3VoxelAttrs {
+/// Voxel classification flags.
+enum b3VoxelFlags
+{
+	b3_posXNeighbor = 0x01,	 ///< The voxel has a neighbor in the positive x direction.
+	b3_posYNeighbor = 0x02,	 ///< The voxel has a neighbor in the positive y direction.
+	b3_posZNeighbor = 0x04,	 ///< The voxel has a neighbor in the positive z direction.
+	b3_negXNeighbor = 0x08,	 ///< The voxel has a neighbor in the negative x direction.
+	b3_negYNeighbor = 0x10,	 ///< The voxel has a neighbor in the negative y direction.
+	b3_negZNeighbor = 0x20,	 ///< The voxel has a neighbor in the negative z direction.
+	b3_isCornerVoxel = 0x40, ///< The voxel is a corner voxel (precomputed from neighbors)
+	b3_isEdgeVoxel = 0x80,	 ///< The voxel is an edge voxel (precomputed from neighbors)
+	b3_isFaceVoxel = 0xC0,	 ///< The voxel is a face voxel (precomputed from neighbors)
+
+	b3_voxNeighborsMask = 0x3F,								 ///< Mask for the neighbor flags
+	b3_voxTypeMask = 0xC0,									 ///< Mask for the voxel type flags
+	b3_voxEnclosedXMask = b3_posXNeighbor | b3_negXNeighbor, ///< Mask for checking if a voxel is enclosed in the x direction
+	b3_voxEnclosedYMask = b3_posYNeighbor | b3_negYNeighbor, ///< Mask for checking if a voxel is enclosed in the y direction
+	b3_voxEnclosedZMask = b3_posZNeighbor | b3_negZNeighbor, ///< Mask for checking if a voxel is enclosed in the z direction
+	b3_voxOccludedMask = b3_voxNeighborsMask,				 ///< Mask for checking if a voxel is fully occluded by neighbors
+};
+
+/// A voxel attribute structure that holds flags and material index for a voxel.
+typedef struct b3VoxelAttrs
+{
+	uint8_t flags;
 	uint8_t matIndex;
 } b3VoxelAttrs;
 
@@ -2661,6 +2685,15 @@ typedef struct b3Voxels
 	/// This scale must be positive and non-zero. The voxel grid is axis-aligned in local space.
 	float scale;
 } b3Voxels;
+
+typedef struct b3VoxelBitmap
+{
+	b3AABB bounds;
+	b3Vec3 extents;
+	int bitCount;
+	int chunkCount;
+	uint64_t* bits;
+} b3VoxelBitmap;
 
 /**@}*/ // voxels
 

@@ -54,6 +54,60 @@ uint32_t b3DecodeVoxelZ( uint64_t code )
 	return (uint32_t)_pext_u64( code, B3_VOXEL_Z_MASK );
 }
 
+/// Voxel bitmap creation and destruction
+
+b3VoxelBitmap b3CreateVoxelBitmap( b3AABB bounds )
+{
+	b3VoxelBitmap bitmap = { 0 };
+	bitmap.bounds.lowerBound = b3Floor( bounds.lowerBound );
+	bitmap.bounds.upperBound = b3Ceil( bounds.upperBound );
+	bitmap.extents = b3Sub( bitmap.bounds.upperBound, bitmap.bounds.lowerBound );
+	bitmap.bitCount = (int)( bitmap.extents.x * bitmap.extents.y * bitmap.extents.z );
+	bitmap.chunkCount = (int)( ( bitmap.bitCount + 63 ) / 64 );
+	bitmap.bits = malloc( bitmap.chunkCount * sizeof( uint64_t ) );
+	memset( bitmap.bits, 0, bitmap.chunkCount * sizeof( uint64_t ) );
+	return bitmap;
+}
+
+void b3DestroyVoxelBitmap( b3VoxelBitmap* bitmap )
+{
+	free( bitmap->bits );
+	bitmap->bits = NULL;
+	bitmap->bitCount = 0;
+	bitmap->chunkCount = 0;
+}
+
+B3_INLINE void getVoxelChunkAndBit( const b3VoxelBitmap* bm, uint32_t x, uint32_t y, uint32_t z, uint32_t* chunk, uint32_t* bit )
+{
+	uint32_t bitx = (uint32_t)( x - bm->bounds.lowerBound.x );
+	uint32_t bity = (uint32_t)( y - bm->bounds.lowerBound.y );
+	uint32_t bitz = (uint32_t)( z - bm->bounds.lowerBound.z );
+	uint32_t bitIndex = (uint32_t)( ( bitz * bm->extents.y + bity ) * bm->extents.x + bitx );
+	*chunk = bitIndex / 64;
+	*bit = bitIndex % 64;
+}
+
+void b3SetVoxelInBitmap( b3VoxelBitmap* bitmap, uint32_t x, uint32_t y, uint32_t z )
+{
+	uint32_t chunkIndex, bitOffset;
+	getVoxelChunkAndBit( bitmap, x, y, z, &chunkIndex, &bitOffset );
+	bitmap->bits[chunkIndex] |= ( 1ull << bitOffset );
+}
+
+void b3ClearVoxelInBitmap( b3VoxelBitmap* bitmap, uint32_t x, uint32_t y, uint32_t z )
+{
+	uint32_t chunkIndex, bitOffset;
+	getVoxelChunkAndBit( bitmap, x, y, z, &chunkIndex, &bitOffset );
+	bitmap->bits[chunkIndex] &= ~( 1ull << bitOffset );
+}
+
+bool b3IsVoxelInBitmap( const b3VoxelBitmap* bitmap, uint32_t x, uint32_t y, uint32_t z )
+{
+	uint32_t chunkIndex, bitOffset;
+	getVoxelChunkAndBit( bitmap, x, y, z, &chunkIndex, &bitOffset );
+	return ( bitmap->bits[chunkIndex] & ( 1ull << bitOffset ) ) != 0;
+}
+
 /// Voxel helper functions
 
 B3_INLINE bool hasChild( uint64_t occupancy, uint32_t bitIndex )
@@ -117,6 +171,7 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 	for ( int i = 0; i < nodeCount; i++ )
 		countByLayer[i] = 1;
 
+	b3VoxelBitmap bitmap = b3CreateVoxelBitmap( (b3AABB){ b3Vec3Of( 0 ), b3Vec3Of( (float)( 4 << ( treeHeight * 2 ) ) ) } );
 	uint64_t lastCode = def->voxels[0].encoded;
 	for ( int i = 1; i < def->voxelCount; i++ )
 	{
@@ -128,6 +183,9 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 		int newCount = msb_64( lastCode ^ code ) / 6;
 		nodeCount += newCount;
 		lastCode = code;
+
+		// mark the voxel in the bitmap, so we can later use it to classify voxels
+		b3SetVoxelInBitmap( &bitmap, b3DecodeVoxelX( code ), b3DecodeVoxelY( code ), b3DecodeVoxelZ( code ) );
 
 		// increment the count of nodes per layer affected
 		for ( int layer = 0; layer < newCount; layer++ )
@@ -223,8 +281,46 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 		}
 	}
 
+	// classify the voxels based on their neighbors
+	for ( int i = 0; i < def->voxelCount; i++ )
+	{
+		uint32_t x = b3DecodeVoxelX( def->voxels[i].encoded );
+		uint32_t y = b3DecodeVoxelY( def->voxels[i].encoded );
+		uint32_t z = b3DecodeVoxelZ( def->voxels[i].encoded );
+		b3VoxelAttrs* attrs = (b3VoxelAttrs*)( (uint8_t*)voxels + voxelsOffset ) + i;
+		if ( x < voxels->bounds.upperBound.x - 1 && b3IsVoxelInBitmap( &bitmap, x + 1, y, z ) )
+			attrs->flags |= b3_posXNeighbor;
+		if ( y < voxels->bounds.upperBound.y - 1 && b3IsVoxelInBitmap( &bitmap, x, y + 1, z ) )
+			attrs->flags |= b3_posYNeighbor;
+		if ( z < voxels->bounds.upperBound.z - 1 && b3IsVoxelInBitmap( &bitmap, x, y, z + 1 ) )
+			attrs->flags |= b3_posZNeighbor;
+		if ( x > voxels->bounds.lowerBound.x && b3IsVoxelInBitmap( &bitmap, x - 1, y, z ) )
+			attrs->flags |= b3_negXNeighbor;
+		if ( y > voxels->bounds.lowerBound.y && b3IsVoxelInBitmap( &bitmap, x, y - 1, z ) )
+			attrs->flags |= b3_negYNeighbor;
+		if ( z > voxels->bounds.lowerBound.z && b3IsVoxelInBitmap( &bitmap, x, y, z - 1 ) )
+			attrs->flags |= b3_negZNeighbor;
+
+		// precompute the voxel classification based on the neighbor flags.
+		// A corner voxel is a voxel which is not enclosed by neighbors on any axis.
+		// An edge voxel is a voxel which is enclosed by neighbors in exactly one axis.
+		// A face voxel is a voxel which is enclosed by neighbors in exactly two axes.
+		// Voxels enclosed on all sides are occluded and generally ignored during collision.
+		bool isEdgeX = ( attrs->flags & b3_voxEnclosedXMask ) == b3_voxEnclosedXMask;
+		bool isEdgeY = ( attrs->flags & b3_voxEnclosedYMask ) == b3_voxEnclosedYMask;
+		bool isEdgeZ = ( attrs->flags & b3_voxEnclosedZMask ) == b3_voxEnclosedZMask;
+
+		if ( !isEdgeX && !isEdgeY && !isEdgeZ )
+			attrs->flags |= b3_isCornerVoxel;
+		else if ( isEdgeX + isEdgeY + isEdgeZ == 1 )
+			attrs->flags |= b3_isEdgeVoxel;
+		else if ( isEdgeX + isEdgeY + isEdgeZ == 2 )
+			attrs->flags |= b3_isFaceVoxel;
+	}
+
 	voxels->hash = 0;
 	voxels->hash = b3NonZeroHash( b3Hash( B3_HASH_INIT, (uint8_t*)voxels, voxels->byteCount ) );
+	b3DestroyVoxelBitmap( &bitmap );
 
 	return voxels;
 }
