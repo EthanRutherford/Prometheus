@@ -2360,6 +2360,23 @@ static bool b3CompoundTimeOfImpactFcn( const b3CompoundData* compound, int child
 	return true;
 }
 
+typedef struct b3VoxelImpactContext
+{
+	b3TOIInput toiInput;
+	b3TOIOutput toiOutput;
+	// Centroid of shape in body B local space
+	b3Vec3 localCentroidB;
+	// Centroid of shape at beginning and end of sweep in voxel local space. Used for early out.
+	b3Vec3 voxLocalCentroidB1, voxLocalCentroidB2;
+	float fallbackRadius;
+} b3VoxelImpactContext;
+
+static void b3VoxelTimeOfImpactFcn( uint64_t code, uint32_t index, void* context )
+{
+	b3VoxelImpactContext* toiContext = context;
+	// todo implement b3VoxelTimeOfImpactFcn
+}
+
 b3TOIOutput b3ShapeTimeOfImpact( b3Shape* shapeA, b3Shape* shapeB, b3Sweep* sweepA, b3Sweep* sweepB, float maxFraction )
 {
 	bool isSensor = shapeA->sensorIndex != B3_NULL_INDEX;
@@ -2461,7 +2478,55 @@ b3TOIOutput b3ShapeTimeOfImpact( b3Shape* shapeA, b3Shape* shapeB, b3Sweep* swee
 		return context.toiOutput;
 	}
 
-	B3_ASSERT( shapeB->type != b3_compoundShape && shapeB->type != b3_meshShape && shapeB->type != b3_heightShape );
+	if ( typeA == b3_voxelShape )
+	{
+		// assuming voxels(A) is static
+
+		b3VoxelImpactContext context = { 0 };
+		context.toiInput.sweepA = *sweepA;
+		context.toiInput.proxyA.count = 1;
+		context.toiInput.proxyB = b3MakeShapeProxy( shapeB );
+		context.toiInput.sweepB = *sweepB;
+		context.toiInput.maxFraction = maxFraction;
+
+		b3Vec3 localCentroidB = b3GetShapeCentroid( shapeB );
+		context.localCentroidB = localCentroidB;
+
+		b3Transform xfA = {
+			.p = b3Sub( sweepA->c1, b3RotateVector( sweepA->q1, sweepA->localCenter ) ),
+			.q = sweepA->q1,
+		};
+
+		b3Transform xfB1 = {
+			.p = b3Sub( sweepB->c1, b3RotateVector( sweepB->q1, sweepB->localCenter ) ),
+			.q = sweepB->q1,
+		};
+
+		b3Transform xfB2 = {
+			.p = b3Sub( sweepB->c2, b3RotateVector( sweepB->q2, sweepB->localCenter ) ),
+			.q = sweepB->q2,
+		};
+
+		float invScale = 1.0f / shapeA->voxels.scale;
+
+		context.voxLocalCentroidB1 = b3MulSV( invScale, b3InvTransformPoint( xfA, b3TransformPoint( xfB1, localCentroidB ) ) );
+		context.voxLocalCentroidB2 = b3MulSV( invScale, b3InvTransformPoint( xfA, b3TransformPoint( xfB2, localCentroidB ) ) );
+
+		b3ShapeExtent extents = b3ComputeShapeExtent( shapeB, context.localCentroidB );
+		context.fallbackRadius = b3MaxFloat( 0.75f * extents.minExtent, B3_SPECULATIVE_DISTANCE ) * invScale;
+
+		// Bounds local to voxels
+		b3AABB bounds = b3ComputeSweptShapeAABB( shapeB, sweepB, maxFraction );
+		b3AABB localBounds = b3AABB_Transform( b3InvertTransform( xfA ), bounds );
+		localBounds.lowerBound = b3MulSV( invScale, localBounds.lowerBound );
+		localBounds.upperBound = b3MulSV( invScale, localBounds.upperBound );
+		b3QueryVoxels( shapeA->voxels.data, localBounds, b3VoxelTimeOfImpactFcn, &context );
+
+		return context.toiOutput;
+	}
+
+	B3_ASSERT( shapeB->type != b3_compoundShape && shapeB->type != b3_meshShape && shapeB->type != b3_heightShape &&
+			   shapeB->type != b3_voxelShape );
 
 	b3TOIInput input;
 	input.proxyA = b3MakeShapeProxy( shapeA );
