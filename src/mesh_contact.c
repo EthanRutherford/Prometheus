@@ -5,6 +5,7 @@
 #include "manifold.h"
 #include "physics_world.h"
 #include "qsort.h"
+#include "reduce_cluster.h"
 #include "shape.h"
 
 #include "box3d/types.h"
@@ -477,7 +478,7 @@ static int b3CullPoints( b3Point2D* points, int count )
 	return 4;
 }
 
-static int b3ReduceCluster( b3LocalManifoldPoint* points, int count1, b3Vec3 normal, b3Arena arena )
+int b3ReduceCluster( b3LocalManifoldPoint* points, int count1, b3Vec3 normal, b3Arena arena )
 {
 	int targetCount = 1;
 	if ( count1 <= targetCount )
@@ -1022,7 +1023,6 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
 		manifold->pointCount = pointCount;
 		manifold->normal = b3MulMV( matrixB, cm->manifoldNormal );
 
-		b3Vec3 clusterNormal = b3MulMV( matrixB, cm->manifoldNormal );
 		float bestDot = normalMatchTolerance;
 		int bestIndex = B3_NULL_INDEX;
 
@@ -1033,7 +1033,7 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
 				continue;
 			}
 
-			float dot = b3Dot( oldManifolds[j].normal, clusterNormal );
+			float dot = b3Dot( oldManifolds[j].normal, manifold->normal );
 			if ( dot > bestDot )
 			{
 				bestIndex = j;

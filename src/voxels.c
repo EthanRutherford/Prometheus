@@ -306,9 +306,9 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 		// An edge voxel is a voxel which is enclosed by neighbors in exactly one axis.
 		// A face voxel is a voxel which is enclosed by neighbors in exactly two axes.
 		// Voxels enclosed on all sides are occluded and generally ignored during collision.
-		bool isEdgeX = ( attrs->flags & b3_voxEnclosedXMask ) == b3_voxEnclosedXMask;
-		bool isEdgeY = ( attrs->flags & b3_voxEnclosedYMask ) == b3_voxEnclosedYMask;
-		bool isEdgeZ = ( attrs->flags & b3_voxEnclosedZMask ) == b3_voxEnclosedZMask;
+		bool isEdgeX = ( attrs->flags & b3_voxXsMask ) == b3_voxXsMask;
+		bool isEdgeY = ( attrs->flags & b3_voxYsMask ) == b3_voxYsMask;
+		bool isEdgeZ = ( attrs->flags & b3_voxZsMask ) == b3_voxZsMask;
 
 		if ( !isEdgeX && !isEdgeY && !isEdgeZ )
 			attrs->flags |= b3_isCornerVoxel;
@@ -464,11 +464,8 @@ float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3Vec3 ori
 			// set final hit properties
 			float tmax = min( min( sideDist.x, sideDist.y ), sideDist.z );
 			output->point = b3Select( flipMask, b3Sub( treeScale, pos ), pos );
-			output->normal = (b3Vec3){
-				tmax >= sideDist.x ? -sign( dir.x ) : 0.0f,
-				tmax >= sideDist.y ? -sign( dir.y ) : 0.0f,
-				tmax >= sideDist.z ? -sign( dir.z ) : 0.0f,
-			};
+			b3Vec3i sideMask = { tmax >= sideDist.x, tmax >= sideDist.y, tmax >= sideDist.z };
+			output->normal = b3Select( sideMask, b3Neg( b3Sign( dir ) ), b3Vec3_zero );
 			output->materialIndex = attrs->matIndex;
 			output->hit = true;
 

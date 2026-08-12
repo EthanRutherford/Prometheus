@@ -221,7 +221,7 @@ void b3CreateContact( b3World* world, b3Shape* shapeA, b3Shape* shapeB, int chil
 		contact->flags |= b3_contactRecycleFlag;
 	}
 
-	if ( shapeA->type == b3_meshShape || shapeA->type == b3_heightShape )
+	if ( shapeA->type == b3_meshShape || shapeA->type == b3_heightShape || shapeA->type == b3_voxelShape )
 	{
 		contact->flags |= b3_simMeshContact;
 	}
@@ -854,8 +854,18 @@ bool b3UpdateContact( b3World* world, int workerIndex, b3Contact* contact, b3Sha
 	}
 	else if ( shapeA->type == b3_voxelShape )
 	{
-		// TODO: implement voxel contact
-		touching = false;
+		touching = b3ComputeVoxelManifolds( world, workerIndex, contact, shapeA, xfA, shapeB, xfB, arena );
+
+		if ( touching && ( ( shapeA->flags & b3_enableHitEvents ) || ( shapeB->flags & b3_enableHitEvents ) ) )
+		{
+			contact->flags |= b3_simEnableHitEvent;
+		}
+		else
+		{
+			contact->flags &= ~b3_simEnableHitEvent;
+		}
+
+		B3_ASSERT( ( touching == true && contact->manifoldCount > 0 ) || ( touching == false && contact->manifoldCount == 0 ) );
 	}
 	else
 	{

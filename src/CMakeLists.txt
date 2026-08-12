@@ -66,6 +66,7 @@ set(BOX3D_SOURCE_FILES
 	recording_replay.h
 	world_snapshot.c
 	world_snapshot.h
+	reduce_cluster.h
 	revolute_joint.c
 	scheduler.c
 	scheduler.h
@@ -87,6 +88,7 @@ set(BOX3D_SOURCE_FILES
 	triangle_manifold.c
 	types.c
 	verstable.h
+	voxel_manifold.c
 	voxels.c
 	weld_joint.c
 	wheel_joint.c

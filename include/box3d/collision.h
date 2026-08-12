@@ -725,18 +725,6 @@ B3_API void b3CollideTriangleAndHull( b3LocalManifold* manifold, int capacity, b
 B3_API void b3CollideTriangleAndSphere( b3LocalManifold* manifold, int capacity, const b3Vec3* triangleA,
 										const b3Sphere* sphereB );
 
-/// Collide two voxel volumes.
-B3_API void b3CollideVoxels( b3LocalManifold* manifold, int capacity, const b3VoxelData* voxelsA, const b3VoxelData* voxelsB,
-							 b3Transform transformBtoA );
-
-/// Collide a voxel volume and a sphere.
-B3_API void b3CollideVoxelsAndSphere( b3LocalManifold* manifold, int capacity, const b3VoxelData* voxelsA,
-									  const b3Sphere* sphereB, b3Transform transformBtoA );
-
-/// Collide a voxel volume and a capsule.
-B3_API void b3CollideVoxelsAndCapsule( b3LocalManifold* manifold, int capacity, const b3VoxelData* voxelsA,
-									   const b3Capsule* capsuleB, b3Transform transformBtoA );
-
 /**@}*/ // collision
 
 /**

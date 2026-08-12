@@ -2628,12 +2628,12 @@ enum b3VoxelFlags
 	b3_isEdgeVoxel = 0x80,	 ///< The voxel is an edge voxel (precomputed from neighbors)
 	b3_isFaceVoxel = 0xC0,	 ///< The voxel is a face voxel (precomputed from neighbors)
 
-	b3_voxNeighborsMask = 0x3F,								 ///< Mask for the neighbor flags
-	b3_voxTypeMask = 0xC0,									 ///< Mask for the voxel type flags
-	b3_voxEnclosedXMask = b3_posXNeighbor | b3_negXNeighbor, ///< Mask for checking if a voxel is enclosed in the x direction
-	b3_voxEnclosedYMask = b3_posYNeighbor | b3_negYNeighbor, ///< Mask for checking if a voxel is enclosed in the y direction
-	b3_voxEnclosedZMask = b3_posZNeighbor | b3_negZNeighbor, ///< Mask for checking if a voxel is enclosed in the z direction
-	b3_voxOccludedMask = b3_voxNeighborsMask,				 ///< Mask for checking if a voxel is fully occluded by neighbors
+	b3_voxNeighborsMask = 0x3F,						  ///< Mask for the neighbor flags
+	b3_voxTypeMask = 0xC0,							  ///< Mask for the voxel type flags
+	b3_voxXsMask = b3_posXNeighbor | b3_negXNeighbor, ///< Mask for checking both x direction neighbors
+	b3_voxYsMask = b3_posYNeighbor | b3_negYNeighbor, ///< Mask for checking both y direction neighbors
+	b3_voxZsMask = b3_posZNeighbor | b3_negZNeighbor, ///< Mask for checking both z direction neighbors
+	b3_voxOccludedMask = b3_voxNeighborsMask,		  ///< Mask for checking if a voxel is fully occluded by neighbors
 };
 
 /// A voxel attribute structure that holds flags and material index for a voxel.

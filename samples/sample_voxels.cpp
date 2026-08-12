@@ -10,6 +10,8 @@
 
 #include "box3d/box3d.h"
 
+static constexpr float fourThirds = 4.0f / 3.0f;
+
 b3VoxelData* createBoxy()
 {
 	b3VoxelDef voxels[101] = {
@@ -137,7 +139,9 @@ b3VoxelData* createBoxy()
 
 b3VoxelData* createVoxelSphere( float radius )
 {
-	b3VoxelDef voxels[10000];
+	// reserve enough space for the maximum number of voxels in a sphere of the given radius
+	// volume of a sphere is (4/3) * r^3 * pi, so we use pi = 3.3 to account for voxelization.
+	b3VoxelDef* voxels = new b3VoxelDef[(int)( radius * radius * radius * fourThirds * 3.3 )];
 
 	float r2 = radius * radius;
 
@@ -159,12 +163,15 @@ b3VoxelData* createVoxelSphere( float radius )
 	b3VoxelsDef voxelsDef = {};
 	voxelsDef.voxelCount = count;
 	voxelsDef.voxels = voxels;
-	return b3CreateVoxels( &voxelsDef );
+	auto result = b3CreateVoxels( &voxelsDef );
+	delete[] voxels;
+	return result;
 }
 
 b3VoxelData* createVoxelCapsule( float length, float radius )
 {
-	b3VoxelDef voxels[10000];
+	// volume of a capsule is (4/3 * r + l) * r^2 * pi, so we use pi = 3.3 to account for voxelization.
+	b3VoxelDef* voxels = new b3VoxelDef[(int)( ( fourThirds * radius + length ) * radius * radius * 3.3 )];
 
 	float halfLength = length * 0.5f + radius;
 	float r2 = radius * radius;
@@ -198,12 +205,15 @@ b3VoxelData* createVoxelCapsule( float length, float radius )
 	b3VoxelsDef voxelsDef = {};
 	voxelsDef.voxelCount = count;
 	voxelsDef.voxels = voxels;
-	return b3CreateVoxels( &voxelsDef );
+	auto result = b3CreateVoxels( &voxelsDef );
+	delete[] voxels;
+	return result;
 }
 
-b3VoxelData* createVoxelCube( int width, int height, int depth )
+b3VoxelData* createVoxelBox( int width, int height, int depth )
 {
-	b3VoxelDef voxels[10000];
+	// reserve enough space for the maximum number of voxels in a box of the given dimensions
+	b3VoxelDef* voxels = new b3VoxelDef[width * height * depth];
 
 	int count = 0;
 	for ( int x = 0; x < width; ++x )
@@ -220,12 +230,16 @@ b3VoxelData* createVoxelCube( int width, int height, int depth )
 	b3VoxelsDef voxelsDef = {};
 	voxelsDef.voxelCount = count;
 	voxelsDef.voxels = voxels;
-	return b3CreateVoxels( &voxelsDef );
+	auto result = b3CreateVoxels( &voxelsDef );
+	delete[] voxels;
+	return result;
 }
 
 b3VoxelData* createVoxelTorus( float majorRadius, float minorRadius )
 {
-	b3VoxelDef voxels[10000];
+	// reserve enough space for the maximum number of voxels in a torus of the given dimensions
+	// volume of a torus is 2 * R * r^2 * pi^2, so we use pi = 3.3 to account for voxelization.
+	b3VoxelDef* voxels = new b3VoxelDef[(int)( 2.0f * majorRadius * minorRadius * minorRadius * 3.3 * 3.3 )];
 
 	float halfLength = majorRadius + minorRadius;
 	float r2 = minorRadius * minorRadius;
@@ -237,7 +251,7 @@ b3VoxelData* createVoxelTorus( float majorRadius, float minorRadius )
 		{
 			for ( float z = -minorRadius + 0.5f; z < minorRadius; z += 1.0f )
 			{
-				float dist2 = (sqrtf( x * x + y * y ) - majorRadius) * (sqrtf( x * x + y * y ) - majorRadius) + z * z;
+				float dist2 = ( sqrtf( x * x + y * y ) - majorRadius ) * ( sqrtf( x * x + y * y ) - majorRadius ) + z * z;
 				if ( dist2 <= r2 )
 				{
 					voxels[count++] = { b3EncodeVoxel( x + halfLength, y + halfLength, z + minorRadius ), 0 };
@@ -249,13 +263,21 @@ b3VoxelData* createVoxelTorus( float majorRadius, float minorRadius )
 	b3VoxelsDef voxelsDef = {};
 	voxelsDef.voxelCount = count;
 	voxelsDef.voxels = voxels;
-	return b3CreateVoxels( &voxelsDef );
+	auto result = b3CreateVoxels( &voxelsDef );
+	delete[] voxels;
+	return result;
 }
 
-class StaticVoxels : public Sample
+b3Vec3 getVoxelCentroid( b3VoxelData* voxels, float scale )
+{
+	b3Vec3 centroid = b3AABB_Center( voxels->bounds );
+	return b3MulSV( scale, centroid );
+}
+
+class BasicVoxels : public Sample
 {
 public:
-	explicit StaticVoxels( SampleContext* context )
+	explicit BasicVoxels( SampleContext* context )
 		: Sample( context )
 	{
 		if ( context->restart == false )
@@ -266,8 +288,8 @@ public:
 		AddGroundBox( 20.0f );
 
 		b3BodyDef bodyDef = b3DefaultBodyDef();
-		bodyDef.type = b3BodyType::b3_staticBody;
-		bodyDef.position = { 0.0f, 0.5f, 0.0f };
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { 0.0f, 2.5f, 0.0f };
 		b3BodyId voxelBody = b3CreateBody( m_worldId, &bodyDef );
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
 		m_voxels = createBoxy();
@@ -275,20 +297,20 @@ public:
 		b3CreateVoxelShape( voxelBody, &shapeDef, m_voxels, 0.1f );
 	}
 
-	~StaticVoxels() override
+	~BasicVoxels() override
 	{
 		b3DestroyVoxels( m_voxels );
 	}
 
 	static Sample* Create( SampleContext* context )
 	{
-		return new StaticVoxels( context );
+		return new BasicVoxels( context );
 	}
 
 	b3VoxelData* m_voxels = nullptr;
 };
 
-static int sampleStaticVoxels = RegisterSample( "Voxels", "Static Voxels", StaticVoxels::Create );
+static int sampleBasicVoxels = RegisterSample( "Voxels", "Basic Voxel Shape", BasicVoxels::Create );
 
 class VoxelRayCurtain : public Sample
 {
@@ -316,7 +338,7 @@ public:
 		b3ShapeId sphereShape = b3CreateVoxelShape( sphereBody, &shapeDef, m_sphereVoxels, 0.1f );
 		massData.center = b3MulSV( 0.1f, b3AABB_Center( b3Shape_GetVoxels( sphereShape ).data->bounds ) );
 		b3Body_SetMassData( sphereBody, massData );
-		b3Body_SetTransform( sphereBody, b3ToPos( b3Sub( { -6.0f, 3.0f, 0.0f }, massData.center )), b3Quat_identity );
+		b3Body_SetTransform( sphereBody, b3ToPos( b3Sub( { -6.0f, 3.0f, 0.0f }, massData.center ) ), b3Quat_identity );
 		b3Body_SetAngularVelocity( sphereBody, { 0.8f, 0.4f, 0.8f } );
 
 		b3BodyId capsuleBody = b3CreateBody( m_worldId, &bodyDef );
@@ -324,15 +346,15 @@ public:
 		b3ShapeId capsuleShape = b3CreateVoxelShape( capsuleBody, &shapeDef, m_capsuleVoxels, 0.1f );
 		massData.center = b3MulSV( 0.1f, b3AABB_Center( b3Shape_GetVoxels( capsuleShape ).data->bounds ) );
 		b3Body_SetMassData( capsuleBody, massData );
-		b3Body_SetTransform( capsuleBody, b3ToPos( b3Sub( { -2.0f, 3.0f, 0.0f }, massData.center )), b3Quat_identity );
+		b3Body_SetTransform( capsuleBody, b3ToPos( b3Sub( { -2.0f, 3.0f, 0.0f }, massData.center ) ), b3Quat_identity );
 		b3Body_SetAngularVelocity( capsuleBody, { 0.8f, 0.4f, 0.8f } );
 
 		b3BodyId cubeBody = b3CreateBody( m_worldId, &bodyDef );
-		m_cubeVoxels = createVoxelCube( 12.0f, 12.0f, 12.0f );
+		m_cubeVoxels = createVoxelBox( 12.0f, 12.0f, 12.0f );
 		b3ShapeId cubeShape = b3CreateVoxelShape( cubeBody, &shapeDef, m_cubeVoxels, 0.1f );
 		massData.center = b3MulSV( 0.1f, b3AABB_Center( b3Shape_GetVoxels( cubeShape ).data->bounds ) );
 		b3Body_SetMassData( cubeBody, massData );
-		b3Body_SetTransform( cubeBody, b3ToPos( b3Sub( { 2.0f, 3.0f, 0.0f }, massData.center )), b3Quat_identity );
+		b3Body_SetTransform( cubeBody, b3ToPos( b3Sub( { 2.0f, 3.0f, 0.0f }, massData.center ) ), b3Quat_identity );
 		b3Body_SetAngularVelocity( cubeBody, { 0.8f, 0.4f, 0.8f } );
 
 		b3BodyId torusBody = b3CreateBody( m_worldId, &bodyDef );
@@ -340,7 +362,7 @@ public:
 		b3ShapeId torusShape = b3CreateVoxelShape( torusBody, &shapeDef, m_torusVoxels, 0.1f );
 		massData.center = b3MulSV( 0.1f, b3AABB_Center( b3Shape_GetVoxels( torusShape ).data->bounds ) );
 		b3Body_SetMassData( torusBody, massData );
-		b3Body_SetTransform( torusBody, b3ToPos( b3Sub( { 6.0f, 3.0f, 0.0f }, massData.center )), b3Quat_identity );
+		b3Body_SetTransform( torusBody, b3ToPos( b3Sub( { 6.0f, 3.0f, 0.0f }, massData.center ) ), b3Quat_identity );
 		b3Body_SetAngularVelocity( torusBody, { 0.8f, 0.4f, 0.8f } );
 
 		m_absSpeed = 0.015f;
@@ -413,3 +435,83 @@ public:
 };
 
 static int sampleRayCastVoxels = RegisterSample( "Voxels", "Voxel Ray Curtain", VoxelRayCurtain::Create );
+
+class VoxelSphereCollision : public Sample
+{
+public:
+	explicit VoxelSphereCollision( SampleContext* context )
+		: Sample( context )
+	{
+		if ( context->restart == false )
+		{
+			m_camera->SetView( 30.0f, 20.0f, 30.0f, b3Pos_zero );
+		}
+
+		AddGroundBox( 20.0f );
+
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		b3Sphere sphere = { b3Vec3_zero, 1.0f };
+
+		m_voxelsFlat = createVoxelBox( 50, 5, 50 );
+		bodyDef.type = b3BodyType::b3_staticBody;
+		bodyDef.position = b3Sub( { -10.0f, 1.0f, 0.0f }, getVoxelCentroid( m_voxelsFlat, 0.1f ) );
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId voxelBody1 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateVoxelShape( voxelBody1, &shapeDef, m_voxelsFlat, 0.1f );
+		b3Vec3 center = b3MulSV( 0.1f, b3AABB_Center( m_voxelsFlat->bounds ) );
+
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { -10.0f, 3.0f, 0.0f };
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId sphereBody1 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateSphereShape( sphereBody1, &shapeDef, &sphere );
+
+		m_voxelsAngled = createVoxelBox( 50, 5, 100 );
+		bodyDef.type = b3BodyType::b3_staticBody;
+		bodyDef.position = b3Sub( { 0.0f, 2.0f, 0.0f }, getVoxelCentroid( m_voxelsAngled, 0.1f ) );
+		bodyDef.rotation = b3MakeQuatFromAxisAngle( b3Vec3_axisX, 0.0625 * B3_PI );
+		b3BodyId voxelBody2 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateVoxelShape( voxelBody2, &shapeDef, m_voxelsAngled, 0.1f );
+
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { 0.0f, 3.0f, 0.0f };
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId sphereBody2 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateSphereShape( sphereBody2, &shapeDef, &sphere );
+
+		m_voxelsTorus = createVoxelTorus( 10.0f, 6.0f );
+		bodyDef.type = b3BodyType::b3_staticBody;
+		b3Vec3 rotatedCenter =
+			b3RotateVector( b3MakeQuatFromAxisAngle( b3Vec3_axisX, 0.5 * B3_PI ), getVoxelCentroid( m_voxelsTorus, 0.1f ) );
+		bodyDef.position = b3Sub( { 10.0f, 1.0f, 0.0f }, rotatedCenter );
+		bodyDef.rotation = b3MakeQuatFromAxisAngle( b3Vec3_axisX, 0.5 * B3_PI );
+		b3BodyId voxelBody3 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateVoxelShape( voxelBody3, &shapeDef, m_voxelsTorus, 0.1f );
+
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { 10.0f, 3.0f, 0.0f };
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId sphereBody3 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateSphereShape( sphereBody3, &shapeDef, &sphere );
+	}
+
+	~VoxelSphereCollision() override
+	{
+		b3DestroyVoxels( m_voxelsFlat );
+		b3DestroyVoxels( m_voxelsAngled );
+		b3DestroyVoxels( m_voxelsTorus );
+	}
+
+	static Sample* Create( SampleContext* context )
+	{
+		return new VoxelSphereCollision( context );
+	}
+
+private:
+	b3VoxelData* m_voxelsFlat = nullptr;
+	b3VoxelData* m_voxelsAngled = nullptr;
+	b3VoxelData* m_voxelsTorus = nullptr;
+};
+
+static int sampleVoxelSphereCollision = RegisterSample( "Voxels", "Voxel Sphere Collision", VoxelSphereCollision::Create );
