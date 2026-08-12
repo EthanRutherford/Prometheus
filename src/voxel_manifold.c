@@ -184,12 +184,17 @@ void voxCapsuleCallback( uint64_t code, uint32_t index, void* context )
 
 	// find the closest points between the capsule segment and the voxel bounding box, using an
 	// analytical solution. This is more performant than the general GJK solution.
-	float bestT = 0.0f;
-	b3Vec3 bestPVox = b3Clamp( ctx->center1, voxMin, voxMax );
-	float bestDist2 = b3LengthSquared( b3Sub( ctx->center1, bestPVox ) );
+	// capsules can result in up to two contact points with a cube, so we need to find the two closest points.
+	float bestT[2];
+	b3Vec3 bestPCaps[2];
+	b3Vec3 bestPVox[2];
+	b3Vec3 bestD[2];
+	float bestDist2[2] = { FLT_MAX, FLT_MAX };
+	int bestCount = 0;
 
-	// center 2, plus the 6 faces of the voxel bounding box
-	float ts[7] = {
+	// capsule endpoints, plus the 6 faces of the voxel bounding box
+	float ts[8] = {
+		0.0f,
 		1.0f,
 		( voxMin.x - ctx->center1.x ) * ctx->invDir.x,
 		( voxMax.x - ctx->center1.x ) * ctx->invDir.x,
@@ -199,50 +204,67 @@ void voxCapsuleCallback( uint64_t code, uint32_t index, void* context )
 		( voxMax.z - ctx->center1.z ) * ctx->invDir.z,
 	};
 
-	for ( int i = 0; i < 7; i++ )
+	for ( int i = 0; i < 8; i++ )
 	{
 		float t = b3ClampFloat( ts[i], 0.0f, 1.0f );
 		b3Vec3 pCaps = b3Add( ctx->center1, b3MulSV( t, ctx->dir ) );
 		b3Vec3 pVox = b3Clamp( pCaps, voxMin, voxMax );
-		float dist2 = b3LengthSquared( b3Sub( pCaps, pVox ) );
-		if ( dist2 < bestDist2 )
+		b3Vec3 d = b3Sub( pCaps, pVox );
+		float dist2 = b3LengthSquared( d );
+		if ( dist2 < 1000.0f * FLT_MIN || dist2 > ctx->maxDist2 )
+			continue;
+
+		if ( dist2 < bestDist2[0] )
 		{
-			bestT = t;
-			bestPVox = pVox;
-			bestDist2 = dist2;
+			bestT[1] = bestT[0];
+			bestPCaps[1] = bestPCaps[0];
+			bestPVox[1] = bestPVox[0];
+			bestD[1] = bestD[0];
+			bestDist2[1] = bestDist2[0];
+
+			bestT[0] = t;
+			bestPCaps[0] = pCaps;
+			bestPVox[0] = pVox;
+			bestD[0] = d;
+			bestDist2[0] = dist2;
+			bestCount = max( bestCount, 1 );
+		}
+		else if ( dist2 < bestDist2[1] )
+		{
+			bestT[1] = t;
+			bestPCaps[1] = pCaps;
+			bestPVox[1] = pVox;
+			bestD[1] = d;
+			bestDist2[1] = dist2;
+			bestCount = 2;
 		}
 	}
 
-	b3Vec3 bestPCaps = b3Add( ctx->center1, b3MulSV( bestT, ctx->dir ) );
+	for ( int i = 0; i < bestCount; i++ )
+	{
+		// we can do the neighbor check again with the found contact point, potentially filtering out a few additional voxels
+		// that were not filtered out by the first neighbor check. TODO: test to see if this is worth it.
+		neighborMask = getNeighborMask( bestPCaps[i], voxMin, voxMax );
+		if ( ( flags & neighborMask ) != 0 )
+			return;
 
-	// we can do the neighbor check again with the found contact point, potentially filtering out a few additional voxels
-	// that were not filtered out by the first neighbor check. TODO: test to see if this is worth it.
-	neighborMask = getNeighborMask( bestPCaps, voxMin, voxMax );
-	if ( ( flags & neighborMask ) != 0 )
-		return;
+		// compute the voxel normal, which is always axis-aligned. The normal points
+		// towards the capsule segment closest point, so the axis with the largest component is the normal axis.
+		b3Vec3 absD = b3Abs( bestD[i] );
+		float maxAxis = max( absD.x, max( absD.y, absD.z ) );
+		b3Vec3i axisMask = { absD.x == maxAxis, absD.y == maxAxis, absD.z == maxAxis };
+		b3Vec3 normal = b3Select( axisMask, b3Sign( bestD[i] ), b3Vec3_zero );
 
-	// compute the squared distance from the closest point to the capsule segment closest point
-	b3Vec3 d = b3Sub( bestPCaps, bestPVox );
-	float dist2 = b3Dot( d, d );
-	if ( dist2 < 1000.0f * FLT_MIN || dist2 > ctx->maxDist2 )
-		return;
+		// add a manifold and point for the contact
+		b3LocalManifold* m = ctx->manifoldBuffer + ctx->manifoldCount++;
+		m->normal = normal;
+		m->points = ctx->pointBuffer + ctx->pointCount;
+		m->pointCount = 1;
 
-	// compute the voxel normal, which is always axis-aligned. The normal points
-	// towards the capsule segment closest point, so the axis with the largest component is the normal axis.
-	b3Vec3 absD = b3Abs( d );
-	float maxAxis = max( absD.x, max( absD.y, absD.z ) );
-	b3Vec3i axisMask = { absD.x == maxAxis, absD.y == maxAxis, absD.z == maxAxis };
-	b3Vec3 normal = b3Select( axisMask, b3Sign( d ), b3Vec3_zero );
-
-	// add a manifold and point for the contact
-	b3LocalManifold* m = ctx->manifoldBuffer + ctx->manifoldCount++;
-	m->normal = normal;
-	m->points = ctx->pointBuffer + ctx->pointCount;
-	m->pointCount = 1;
-
-	b3LocalManifoldPoint* mp = ctx->pointBuffer + ctx->pointCount++;
-	mp->point = bestPVox;
-	mp->separation = sqrtf( dist2 ) - ctx->radius;
+		b3LocalManifoldPoint* mp = ctx->pointBuffer + ctx->pointCount++;
+		mp->point = bestPVox[i];
+		mp->separation = sqrtf( bestDist2[i] ) - ctx->radius;
+	}
 }
 
 void collideVoxCapsule( VoxCollideContext* context, b3Voxels voxelsA, const b3Capsule* capsuleB, b3Transform bToA )
@@ -256,7 +278,11 @@ void collideVoxCapsule( VoxCollideContext* context, b3Voxels voxelsA, const b3Ca
 	context->center1 = b3MulSV( invScale, b3TransformPoint( bToA, capsuleB->center1 ) );
 	context->center2 = b3MulSV( invScale, b3TransformPoint( bToA, capsuleB->center2 ) );
 	context->dir = b3Sub( context->center2, context->center1 );
-	context->invDir = (b3Vec3){ 1.0f / context->dir.x, 1.0f / context->dir.y, 1.0f / context->dir.z };
+	context->invDir = (b3Vec3){
+		context->dir.x != 0 ? 1.0f / context->dir.x : 0.0f,
+		context->dir.y != 0 ? 1.0f / context->dir.y : 0.0f,
+		context->dir.z != 0 ? 1.0f / context->dir.z : 0.0f,
+	};
 
 	// iterate the voxels that are within the bounding box
 	b3Vec3 extent = b3Vec3Of( context->radius + specDist );

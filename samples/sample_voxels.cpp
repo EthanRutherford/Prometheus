@@ -570,7 +570,7 @@ public:
 		b3CreateVoxelShape( voxelBody3, &shapeDef, m_voxelsTorus, 0.1f );
 
 		bodyDef.type = b3BodyType::b3_dynamicBody;
-		bodyDef.position = { 9.25f, 3.0f, 0.0f };
+		bodyDef.position = { 9.3f, 3.0f, 0.0f };
 		bodyDef.rotation = b3Quat_identity;
 		b3BodyId capsuleBody3 = b3CreateBody( m_worldId, &bodyDef );
 		b3CreateCapsuleShape( capsuleBody3, &shapeDef, &capsule );
