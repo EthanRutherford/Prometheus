@@ -319,7 +319,7 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 	}
 
 	voxels->hash = 0;
-	voxels->hash = b3NonZeroHash( b3Hash( B3_HASH_INIT, (uint8_t*)voxels, voxels->byteCount ) );
+	voxels->hash = b3Hash64NonZero((uint8_t*)voxels, voxels->byteCount );
 	b3DestroyVoxelBitmap( &bitmap );
 
 	return voxels;

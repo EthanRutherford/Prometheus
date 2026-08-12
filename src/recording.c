@@ -1186,7 +1186,7 @@ uint32_t b3RecInternVoxels( b3Recording* rec, const b3VoxelData* voxels )
 	int byteCount = voxels->byteCount;
 	uint8_t* bytes = b3Alloc( (size_t)byteCount );
 	memcpy( bytes, voxels, (size_t)byteCount );
-	uint64_t h = b3Hash64Blob( bytes, byteCount );
+	uint64_t h = b3Hash64NonZero( bytes, byteCount );
 	return b3InternGeometry( &rec->registry, b3_geometryVoxels, h, bytes, byteCount );
 }
 
