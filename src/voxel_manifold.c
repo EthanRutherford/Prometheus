@@ -15,6 +15,25 @@
 #define POINT_BUFFER_CAPACITY MANIFOLD_BUFFER_CAPACITY * 32
 #define POINT_RECYCLE_TOL_2 ( B3_LINEAR_SLOP * B3_LINEAR_SLOP )
 
+// builds a mask that can be used to detect if a voxel has a neighbor that is closer to the candidate point than itself.
+// This is used to cull contact points early, knowing that there is at least one coplanar voxel that can generate a deeper
+// contact point. This early culling helps reduce load on the later clustering algorithm, which can cull additional points.
+static uint32_t getNeighborMask( const b3Vec3 candidate, const b3Vec3 voxMin, const b3Vec3 voxMax )
+{
+	// this is effectively an AABB SAT test, resulting in a mask of the separating axes.
+	// if a voxel has a neighbor along a separating axis, that neighbor is closer to the candidate point.
+	// An extra bonus, this also filters out any contact points which would have a normal pointed into
+	// a neighboring voxel, which is not a valid contact point for collision resolution.
+	uint32_t neighborMask = 0;
+	neighborMask |= candidate.x < voxMin.x ? b3_negXNeighbor : 0;
+	neighborMask |= candidate.x > voxMax.x ? b3_posXNeighbor : 0;
+	neighborMask |= candidate.y < voxMin.y ? b3_negYNeighbor : 0;
+	neighborMask |= candidate.y > voxMax.y ? b3_posYNeighbor : 0;
+	neighborMask |= candidate.z < voxMin.z ? b3_negZNeighbor : 0;
+	neighborMask |= candidate.z > voxMax.z ? b3_posZNeighbor : 0;
+	return neighborMask;
+}
+
 typedef struct VoxCollideContext
 {
 	b3LocalManifold* manifoldBuffer;
@@ -22,20 +41,23 @@ typedef struct VoxCollideContext
 	b3LocalManifoldPoint* pointBuffer;
 	int pointCount;
 
-	float specDist;
 	const b3VoxelData* voxelsA;
+	float maxDist2;
+	float radius;
 	union
 	{
 		// Sphere collision context
 		struct
 		{
 			b3Vec3 center;
-			float radius;
 		};
 		// Capsule collision context
 		struct
 		{
-			int dummyA;
+			b3Vec3 center1;
+			b3Vec3 center2;
+			b3Vec3 dir;
+			b3Vec3 invDir;
 		};
 		// Hull collision context
 		struct
@@ -73,13 +95,8 @@ void voxSphereCallback( uint64_t code, uint32_t index, void* context )
 
 	// if there is a neighboring voxel which is closer to the sphere center than this voxel, then skip this one.
 	// A neighboring voxel means we are part of an edge/surface, and we ideally only generate one contact point per edge/surface.
-	uint32_t neighborMask = 0;
-	neighborMask |= ctx->center.x < voxMin.x ? b3_negXNeighbor : 0;
-	neighborMask |= ctx->center.x > voxMax.x ? b3_posXNeighbor : 0;
-	neighborMask |= ctx->center.y < voxMin.y ? b3_negYNeighbor : 0;
-	neighborMask |= ctx->center.y > voxMax.y ? b3_posYNeighbor : 0;
-	neighborMask |= ctx->center.z < voxMin.z ? b3_negZNeighbor : 0;
-	neighborMask |= ctx->center.z > voxMax.z ? b3_posZNeighbor : 0;
+	// This reduces the number of contact points the manifold clustering algorithm needs to process.
+	uint32_t neighborMask = getNeighborMask( ctx->center, voxMin, voxMax );
 	if ( ( flags & neighborMask ) != 0 )
 		return;
 
@@ -89,8 +106,7 @@ void voxSphereCallback( uint64_t code, uint32_t index, void* context )
 	// compute the squared distance from the closest point to the sphere center
 	b3Vec3 d = b3Sub( ctx->center, closestPoint );
 	float dist2 = b3Dot( d, d );
-	float maxDist2 = ( ctx->radius + ctx->specDist ) * ( ctx->radius + ctx->specDist );
-	if ( dist2 < 1000.0f * FLT_MIN || dist2 > maxDist2 )
+	if ( dist2 < 1000.0f * FLT_MIN || dist2 > ctx->maxDist2 )
 		return;
 
 	// compute the voxel normal, which is always axis-aligned. The normal points
@@ -115,13 +131,14 @@ void collideVoxSphere( VoxCollideContext* context, b3Voxels voxelsA, const b3Sph
 {
 	// get the center, radius, and speculative distance of the sphere in voxel space/scale
 	float invScale = 1.0f / voxelsA.scale;
-	context->specDist = B3_SPECULATIVE_DISTANCE * invScale;
+	float specDist = B3_SPECULATIVE_DISTANCE * invScale;
+	context->radius = sphereB->radius * invScale;
+	context->maxDist2 = ( context->radius + specDist ) * ( context->radius + specDist );
 	context->voxelsA = voxelsA.data;
 	context->center = b3MulSV( invScale, b3TransformPoint( bToA, sphereB->center ) );
-	context->radius = sphereB->radius * invScale;
 
 	// iterate the voxels that are within the bounding box
-	b3Vec3 extent = b3Vec3Of( context->radius + context->specDist );
+	b3Vec3 extent = b3Vec3Of( context->radius + specDist );
 	b3AABB queryBounds = { b3Sub( context->center, extent ), b3Add( context->center, extent ) };
 	b3QueryVoxels( voxelsA.data, queryBounds, voxSphereCallback, context );
 
@@ -134,17 +151,135 @@ void collideVoxSphere( VoxCollideContext* context, b3Voxels voxelsA, const b3Sph
 	}
 }
 
-void collideVoxCapsule( VoxCollideContext* context, b3Voxels voxelsA, const b3Capsule* capsuleB, b3Transform transformBtoA )
+void voxCapsuleCallback( uint64_t code, uint32_t index, void* context )
 {
-	printf( "collideVoxCapsule not implemented\n" );
+	VoxCollideContext* ctx = (VoxCollideContext*)context;
+
+	// abort if we run out of space in the manifold buffer
+	if ( ctx->manifoldCount == MANIFOLD_BUFFER_CAPACITY )
+		return;
+
+	// skip fully occluded voxels
+	uint8_t flags = b3GetVoxelAttrs( ctx->voxelsA )[index].flags;
+	if ( ( flags & b3_voxNeighborsMask ) == b3_voxOccludedMask )
+		return;
+
+	// decode the voxel bounding box from the Morton code
+	b3Vec3 voxMin = { (float)b3DecodeVoxelX( code ), (float)b3DecodeVoxelY( code ), (float)b3DecodeVoxelZ( code ) };
+	b3Vec3 voxMax = b3Add( voxMin, b3Vec3Of( 1.0f ) );
+
+	// similar to the sphere case, we can skip voxels that are coplanar with nearer voxels
+	// in this case, we're actually using the bounding box of the capsule segment, rather than a
+	// single point, which is a conservative check that may miss some voxels that could be skipped.
+	// However, this can prevent computing the closest point calculation below.
+	uint32_t neighborMask = 0;
+	neighborMask |= max( ctx->center1.x, ctx->center2.x ) < voxMin.x ? b3_negXNeighbor : 0;
+	neighborMask |= min( ctx->center1.x, ctx->center2.x ) > voxMax.x ? b3_posXNeighbor : 0;
+	neighborMask |= max( ctx->center1.y, ctx->center2.y ) < voxMin.y ? b3_negYNeighbor : 0;
+	neighborMask |= min( ctx->center1.y, ctx->center2.y ) > voxMax.y ? b3_posYNeighbor : 0;
+	neighborMask |= max( ctx->center1.z, ctx->center2.z ) < voxMin.z ? b3_negZNeighbor : 0;
+	neighborMask |= min( ctx->center1.z, ctx->center2.z ) > voxMax.z ? b3_posZNeighbor : 0;
+	if ( ( flags & neighborMask ) != 0 )
+		return;
+
+	// find the closest points between the capsule segment and the voxel bounding box, using an
+	// analytical solution. This is more performant than the general GJK solution.
+	float bestT = 0.0f;
+	b3Vec3 bestPVox = b3Clamp( ctx->center1, voxMin, voxMax );
+	float bestDist2 = b3LengthSquared( b3Sub( ctx->center1, bestPVox ) );
+
+	// center 2, plus the 6 faces of the voxel bounding box
+	float ts[7] = {
+		1.0f,
+		( voxMin.x - ctx->center1.x ) * ctx->invDir.x,
+		( voxMax.x - ctx->center1.x ) * ctx->invDir.x,
+		( voxMin.y - ctx->center1.y ) * ctx->invDir.y,
+		( voxMax.y - ctx->center1.y ) * ctx->invDir.y,
+		( voxMin.z - ctx->center1.z ) * ctx->invDir.z,
+		( voxMax.z - ctx->center1.z ) * ctx->invDir.z,
+	};
+
+	for ( int i = 0; i < 7; i++ )
+	{
+		float t = b3ClampFloat( ts[i], 0.0f, 1.0f );
+		b3Vec3 pCaps = b3Add( ctx->center1, b3MulSV( t, ctx->dir ) );
+		b3Vec3 pVox = b3Clamp( pCaps, voxMin, voxMax );
+		float dist2 = b3LengthSquared( b3Sub( pCaps, pVox ) );
+		if ( dist2 < bestDist2 )
+		{
+			bestT = t;
+			bestPVox = pVox;
+			bestDist2 = dist2;
+		}
+	}
+
+	b3Vec3 bestPCaps = b3Add( ctx->center1, b3MulSV( bestT, ctx->dir ) );
+
+	// we can do the neighbor check again with the found contact point, potentially filtering out a few additional voxels
+	// that were not filtered out by the first neighbor check. TODO: test to see if this is worth it.
+	neighborMask = getNeighborMask( bestPCaps, voxMin, voxMax );
+	if ( ( flags & neighborMask ) != 0 )
+		return;
+
+	// compute the squared distance from the closest point to the capsule segment closest point
+	b3Vec3 d = b3Sub( bestPCaps, bestPVox );
+	float dist2 = b3Dot( d, d );
+	if ( dist2 < 1000.0f * FLT_MIN || dist2 > ctx->maxDist2 )
+		return;
+
+	// compute the voxel normal, which is always axis-aligned. The normal points
+	// towards the capsule segment closest point, so the axis with the largest component is the normal axis.
+	b3Vec3 absD = b3Abs( d );
+	float maxAxis = max( absD.x, max( absD.y, absD.z ) );
+	b3Vec3i axisMask = { absD.x == maxAxis, absD.y == maxAxis, absD.z == maxAxis };
+	b3Vec3 normal = b3Select( axisMask, b3Sign( d ), b3Vec3_zero );
+
+	// add a manifold and point for the contact
+	b3LocalManifold* m = ctx->manifoldBuffer + ctx->manifoldCount++;
+	m->normal = normal;
+	m->points = ctx->pointBuffer + ctx->pointCount;
+	m->pointCount = 1;
+
+	b3LocalManifoldPoint* mp = ctx->pointBuffer + ctx->pointCount++;
+	mp->point = bestPVox;
+	mp->separation = sqrtf( dist2 ) - ctx->radius;
 }
 
-void collideVoxHull( VoxCollideContext* context, b3Voxels voxelsA, const b3HullData* hullB, b3Transform transformBtoA )
+void collideVoxCapsule( VoxCollideContext* context, b3Voxels voxelsA, const b3Capsule* capsuleB, b3Transform bToA )
+{
+	// get the center, radius, and speculative distance of the capsule in voxel space/scale
+	float invScale = 1.0f / voxelsA.scale;
+	float specDist = B3_SPECULATIVE_DISTANCE * invScale;
+	context->radius = capsuleB->radius * invScale;
+	context->maxDist2 = ( context->radius + specDist ) * ( context->radius + specDist );
+	context->voxelsA = voxelsA.data;
+	context->center1 = b3MulSV( invScale, b3TransformPoint( bToA, capsuleB->center1 ) );
+	context->center2 = b3MulSV( invScale, b3TransformPoint( bToA, capsuleB->center2 ) );
+	context->dir = b3Sub( context->center2, context->center1 );
+	context->invDir = (b3Vec3){ 1.0f / context->dir.x, 1.0f / context->dir.y, 1.0f / context->dir.z };
+
+	// iterate the voxels that are within the bounding box
+	b3Vec3 extent = b3Vec3Of( context->radius + specDist );
+	b3Vec3 capsuleMin = b3Min( context->center1, context->center2 );
+	b3Vec3 capsuleMax = b3Max( context->center1, context->center2 );
+	b3AABB queryBounds = { b3Sub( capsuleMin, extent ), b3Add( capsuleMax, extent ) };
+	b3QueryVoxels( voxelsA.data, queryBounds, voxCapsuleCallback, context );
+
+	// descale the manifold points
+	for ( int i = 0; i < context->pointCount; i++ )
+	{
+		b3LocalManifoldPoint* mp = context->pointBuffer + i;
+		mp->point = b3MulSV( voxelsA.scale, mp->point );
+		mp->separation = mp->separation * voxelsA.scale;
+	}
+}
+
+void collideVoxHull( VoxCollideContext* context, b3Voxels voxelsA, const b3HullData* hullB, b3Transform bToA )
 {
 	printf( "collideVoxHull not implemented\n" );
 }
 
-void collideVoxVox( VoxCollideContext* context, b3Voxels voxelsA, b3Voxels voxelsB, b3Transform transformBtoA )
+void collideVoxVox( VoxCollideContext* context, b3Voxels voxelsA, b3Voxels voxelsB, b3Transform bToA )
 {
 	printf( "collideVoxVox not implemented\n" );
 }

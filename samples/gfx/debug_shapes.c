@@ -932,7 +932,7 @@ static MeshHandle BuildVoxels( const b3VoxelData* voxelData )
 {
 	if ( voxelData->voxelCount <= 0 )
 	{
-		fprintf( stderr, "error: voxel volume missing arrays or empty (hash=0x%08x)\n", voxelData->hash );
+		fprintf( stderr, "error: voxel volume missing arrays or empty (hash=0x%016llx)\n", voxelData->hash );
 		return InvalidMeshHandle();
 	}
 
