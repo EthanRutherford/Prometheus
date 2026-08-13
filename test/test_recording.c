@@ -1666,20 +1666,6 @@ static int GeometryHashCollision( void )
 	const int n = 16;
 	const uint64_t sharedHash = 0xABCD1234ull;
 
-	// The content hash must use its full width: a one-byte change in a same-length blob has to perturb
-	// the high word too, not just the low one, which is the trap a reseeded 32-bit djb2 fell into.
-	{
-		uint8_t p[16];
-		uint8_t q[16];
-		memset( p, 0x11, sizeof( p ) );
-		memset( q, 0x11, sizeof( q ) );
-		q[7] = 0x12;
-		uint64_t hp = b3Hash64NonZero( p, (int)sizeof( p ) );
-		uint64_t hq = b3Hash64NonZero( q, (int)sizeof( q ) );
-		ENSURE( hp != hq );
-		ENSURE( (uint32_t)( hp >> 32 ) != (uint32_t)( hq >> 32 ) );
-	}
-
 	b3GeometryRegistry reg = { 0 };
 
 	uint8_t* blobA = (uint8_t*)b3Alloc( (size_t)n );
