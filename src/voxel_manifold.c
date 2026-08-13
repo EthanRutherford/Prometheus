@@ -11,8 +11,7 @@
 
 #include <stdlib.h>
 
-#define MANIFOLD_BUFFER_CAPACITY 256
-#define POINT_BUFFER_CAPACITY MANIFOLD_BUFFER_CAPACITY * 32
+#define POINT_BUFFER_CAPACITY 256
 #define POINT_RECYCLE_TOL_2 ( B3_LINEAR_SLOP * B3_LINEAR_SLOP )
 
 // builds a mask that can be used to detect if a voxel has a neighbor that is closer to the candidate point than itself.
@@ -34,11 +33,16 @@ static uint32_t getNeighborMask( const b3Vec3 candidate, const b3Vec3 voxMin, co
 	return neighborMask;
 }
 
+typedef struct VoxCandidatePoint
+{
+	b3Vec3 point;
+	b3Vec3 normal;
+	float separation;
+} VoxCandidatePoint;
+
 typedef struct VoxCollideContext
 {
-	b3LocalManifold* manifoldBuffer;
-	int manifoldCount;
-	b3LocalManifoldPoint* pointBuffer;
+	VoxCandidatePoint* pointBuffer;
 	int pointCount;
 
 	const b3VoxelData* voxelsA;
@@ -77,7 +81,7 @@ void voxSphereCallback( uint64_t code, uint32_t index, void* context )
 	VoxCollideContext* ctx = (VoxCollideContext*)context;
 
 	// abort if we run out of space in the manifold buffer
-	if ( ctx->manifoldCount == MANIFOLD_BUFFER_CAPACITY )
+	if ( ctx->pointCount == POINT_BUFFER_CAPACITY )
 		return;
 
 	// skip fully occluded voxels. We want to calculate penetration based on the external surface,
@@ -116,15 +120,11 @@ void voxSphereCallback( uint64_t code, uint32_t index, void* context )
 	b3Vec3i axisMask = { absD.x == maxAxis, absD.y == maxAxis, absD.z == maxAxis };
 	b3Vec3 normal = b3Select( axisMask, b3Sign( d ), b3Vec3_zero );
 
-	// add a manifold and point for the contact
-	b3LocalManifold* m = ctx->manifoldBuffer + ctx->manifoldCount++;
-	m->normal = normal;
-	m->points = ctx->pointBuffer + ctx->pointCount;
-	m->pointCount = 1;
-
-	b3LocalManifoldPoint* mp = ctx->pointBuffer + ctx->pointCount++;
-	mp->point = closestPoint;
-	mp->separation = sqrtf( dist2 ) - ctx->radius;
+	// add a candidate point for the contact
+	VoxCandidatePoint* cp = ctx->pointBuffer + ctx->pointCount++;
+	cp->point = closestPoint;
+	cp->normal = normal;
+	cp->separation = sqrtf( dist2 ) - ctx->radius;
 }
 
 void collideVoxSphere( VoxCollideContext* context, b3Voxels voxelsA, const b3Sphere* sphereB, b3Transform bToA )
@@ -145,9 +145,9 @@ void collideVoxSphere( VoxCollideContext* context, b3Voxels voxelsA, const b3Sph
 	// descale the manifold points
 	for ( int i = 0; i < context->pointCount; i++ )
 	{
-		b3LocalManifoldPoint* mp = context->pointBuffer + i;
-		mp->point = b3MulSV( voxelsA.scale, mp->point );
-		mp->separation = mp->separation * voxelsA.scale;
+		VoxCandidatePoint* cp = context->pointBuffer + i;
+		cp->point = b3MulSV( voxelsA.scale, cp->point );
+		cp->separation = cp->separation * voxelsA.scale;
 	}
 }
 
@@ -156,7 +156,7 @@ void voxCapsuleCallback( uint64_t code, uint32_t index, void* context )
 	VoxCollideContext* ctx = (VoxCollideContext*)context;
 
 	// abort if we run out of space in the manifold buffer
-	if ( ctx->manifoldCount == MANIFOLD_BUFFER_CAPACITY )
+	if ( ctx->pointCount == POINT_BUFFER_CAPACITY )
 		return;
 
 	// skip fully occluded voxels
@@ -256,14 +256,10 @@ void voxCapsuleCallback( uint64_t code, uint32_t index, void* context )
 		b3Vec3 normal = b3Select( axisMask, b3Sign( bestD[i] ), b3Vec3_zero );
 
 		// add a manifold and point for the contact
-		b3LocalManifold* m = ctx->manifoldBuffer + ctx->manifoldCount++;
-		m->normal = normal;
-		m->points = ctx->pointBuffer + ctx->pointCount;
-		m->pointCount = 1;
-
-		b3LocalManifoldPoint* mp = ctx->pointBuffer + ctx->pointCount++;
-		mp->point = bestPVox[i];
-		mp->separation = sqrtf( bestDist2[i] ) - ctx->radius;
+		VoxCandidatePoint* cp = ctx->pointBuffer + ctx->pointCount++;
+		cp->point = bestPVox[i];
+		cp->normal = normal;
+		cp->separation = sqrtf( bestDist2[i] ) - ctx->radius;
 	}
 }
 
@@ -294,9 +290,9 @@ void collideVoxCapsule( VoxCollideContext* context, b3Voxels voxelsA, const b3Ca
 	// descale the manifold points
 	for ( int i = 0; i < context->pointCount; i++ )
 	{
-		b3LocalManifoldPoint* mp = context->pointBuffer + i;
-		mp->point = b3MulSV( voxelsA.scale, mp->point );
-		mp->separation = mp->separation * voxelsA.scale;
+		VoxCandidatePoint* cp = context->pointBuffer + i;
+		cp->point = b3MulSV( voxelsA.scale, cp->point );
+		cp->separation = cp->separation * voxelsA.scale;
 	}
 }
 
@@ -356,8 +352,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	uint64_t ticks = b3GetTicks();
 
 	VoxCollideContext context = { 0 };
-	context.manifoldBuffer = b3Bump( &arena, MANIFOLD_BUFFER_CAPACITY * sizeof( b3LocalManifold ) );
-	context.pointBuffer = b3Bump( &arena, POINT_BUFFER_CAPACITY * sizeof( b3LocalManifoldPoint ) );
+	context.pointBuffer = b3Bump( &arena, POINT_BUFFER_CAPACITY * sizeof( VoxCandidatePoint ) );
 
 	b3Transform transformBtoA = b3InvMulWorldTransforms( xfA, xfB );
 
@@ -379,7 +374,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 		collideVoxVox( &context, shapeA->voxels, shapeB->voxels, transformBtoA );
 	}
 
-	if ( context.manifoldCount == 0 )
+	if ( context.pointCount == 0 )
 	{
 		if ( contact->manifoldCount > 0 )
 		{
@@ -397,36 +392,29 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	// Because the voxel normals are axis-aligned, we only have 6 possible normal directions.
 	// This allows for several assumptions that make this faster than the mesh clustering logic.
 	VoxCluster clusters[6] = { 0 };
-	int* clusterMemberships = b3Bump( &arena, context.manifoldCount * sizeof( int ) );
-	int clusterPointCount = 0;
-	for ( int i = 0; i < context.manifoldCount; ++i )
+	int* clusterMemberships = b3Bump( &arena, context.pointCount * sizeof( int ) );
+	for ( int i = 0; i < context.pointCount; ++i )
 	{
-		b3LocalManifold* lm = context.manifoldBuffer + i;
-		int clusterIdx = clusterIndex( lm->normal );
+		VoxCandidatePoint* cp = context.pointBuffer + i;
+		int clusterIdx = clusterIndex( cp->normal );
 		VoxCluster* cluster = clusters + clusterIdx;
 		clusterMemberships[i] = clusterIdx;
-		cluster->capacity += lm->pointCount;
-		clusterPointCount += lm->pointCount;
+		cluster->capacity++;
 	}
 
 	// Initialize the clusters
-	b3LocalManifoldPoint* clusterPoints = b3Bump( &arena, clusterPointCount * sizeof( b3LocalManifoldPoint ) );
+	b3LocalManifoldPoint* clusterPoints = b3Bump( &arena, context.pointCount * sizeof( b3LocalManifoldPoint ) );
 	initClusters( clusters, clusterPoints );
 
-	// Clone manifold points into the clusters
-	for ( int i = 0; i < context.manifoldCount; ++i )
+	// Clone candidate points into the clusters
+	for ( int i = 0; i < context.pointCount; ++i )
 	{
-		b3LocalManifold* lm = context.manifoldBuffer + i;
+		VoxCandidatePoint* cp = context.pointBuffer + i;
 		int clusterIdx = clusterMemberships[i];
 		VoxCluster* cluster = clusters + clusterIdx;
-
-		for ( int j = 0; j < lm->pointCount; ++j )
-		{
-			b3LocalManifoldPoint* srcPt = lm->points + j;
-			b3LocalManifoldPoint* dstPt = cluster->points + cluster->count++;
-			dstPt->point = srcPt->point;
-			dstPt->separation = srcPt->separation;
-		}
+		b3LocalManifoldPoint* dstPt = cluster->points + cluster->count++;
+		dstPt->point = cp->point;
+		dstPt->separation = cp->separation;
 	}
 
 	// Reduce clusters
