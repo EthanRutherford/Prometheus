@@ -28,6 +28,14 @@ typedef struct b3TriangleCache
 
 b3DeclareArray( b3TriangleCache );
 
+typedef struct b3VoxelCache
+{
+	b3Vec3 min;
+	uint32_t flags;
+} b3VoxelCache;
+
+b3DeclareArray( b3VoxelCache );
+
 enum b3ContactFlags
 {
 	// Set when the solid shapes are touching.
@@ -70,6 +78,9 @@ enum b3ContactFlags
 
 	// Enable speculative contact points
 	b3_enableSpeculativePoints = 0x01000000,
+
+	// This is a voxel contact
+	b3_simVoxelContact = 0x02000000,
 };
 
 // A contact edge is used to connect bodies and contacts together
@@ -94,6 +105,12 @@ typedef struct b3ConvexContact
 {
 	b3ContactCache cache;
 } b3ConvexContact;
+
+typedef struct b3VoxelContact
+{
+	b3Array( b3VoxelCache ) voxelCache;
+	b3AABB queryBounds;
+} b3VoxelContact;
 
 // Represents the persistent interaction between two shapes
 typedef struct b3Contact
@@ -144,11 +161,12 @@ typedef struct b3Contact
 	// Mixed friction and restitution
 	float friction;
 
-	// Usage determined by b3_simMeshContact in simFlags
+	// Usage determined by b3_simMeshContact/b3_simVoxelContact in simFlags
 	union
 	{
 		b3ConvexContact convexContact;
 		b3MeshContact meshContact;
+		b3VoxelContact voxelContact;
 	};
 
 	float restitution;

@@ -803,6 +803,12 @@ static void b3SerContacts( b3RecBuffer* buf, b3World* world )
 			copy.meshContact.triangleCache.count = 0;
 			copy.meshContact.triangleCache.capacity = 0;
 		}
+		else if ( copy.flags & b3_simVoxelContact )
+		{
+			copy.voxelContact.voxelCache.data = NULL;
+			copy.voxelContact.voxelCache.count = 0;
+			copy.voxelContact.voxelCache.capacity = 0;
+		}
 		b3SnapW_Bytes( buf, &copy, sizeof( b3Contact ) );
 
 		if ( !isLive )
@@ -828,6 +834,15 @@ static void b3SerContacts( b3RecBuffer* buf, b3World* world )
 			{
 				b3SnapW_Bytes( buf, c->meshContact.triangleCache.data,
 							   c->meshContact.triangleCache.count * (int)sizeof( b3TriangleCache ) );
+			}
+		}
+		else if ( c->flags & b3_simVoxelContact )
+		{
+			b3SnapW_I32( buf, c->voxelContact.voxelCache.count );
+			if ( c->voxelContact.voxelCache.count > 0 )
+			{
+				b3SnapW_Bytes( buf, c->voxelContact.voxelCache.data,
+							   c->voxelContact.voxelCache.count * (int)sizeof( b3VoxelCache ) );
 			}
 		}
 	}

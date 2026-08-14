@@ -144,7 +144,7 @@ void b3AddContactToGraph( b3World* world, b3Contact* contact )
 	}
 #endif
 
-	bool isScalar = ( contact->flags & b3_simMeshContact ) || colorIndex == B3_OVERFLOW_INDEX;
+	bool isScalar = ( contact->flags & ( b3_simMeshContact | b3_simVoxelContact ) ) || colorIndex == B3_OVERFLOW_INDEX;
 
 	b3GraphColor* color = graph->colors + colorIndex;
 	contact->colorIndex = colorIndex;
@@ -207,7 +207,7 @@ void b3RemoveContactFromGraph( b3World* world, int bodyIdA, int bodyIdB, int col
 			B3_ASSERT( movedContact->setIndex == b3_awakeSet );
 			B3_ASSERT( movedContact->colorIndex == colorIndex );
 			B3_ASSERT( movedContact->localIndex == movedIndex );
-			B3_ASSERT( ( movedContact->flags & b3_simMeshContact ) == 0 );
+			B3_ASSERT( ( movedContact->flags & ( b3_simMeshContact | b3_simVoxelContact ) ) == 0 );
 			movedContact->localIndex = localIndex;
 		}
 	}

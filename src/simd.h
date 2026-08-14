@@ -507,6 +507,19 @@ static inline bool b3AllZeroW( b3FloatW a )
 #endif
 }
 
+static inline bool b3AllTrueW( b3FloatW mask )
+{
+	// Check if all values are non-zero using vminvq
+#ifdef __ARM_FEATURE_SVE
+	return ( vminvq_u32( vreinterpretq_u32_f32( mask ) ) != 0 );
+#else
+	// For older ARM architectures, we need to manually check all lanes
+	uint32x4_t m = vreinterpretq_u32_f32( mask );
+	return vgetq_lane_u32( m, 0 ) != 0 && vgetq_lane_u32( m, 1 ) != 0 && vgetq_lane_u32( m, 2 ) != 0 &&
+		   vgetq_lane_u32( m, 3 ) != 0;
+#endif
+}
+
 // _mm_movemask_ps equivalent, compatible with ARM v7.
 static inline bool b3AnyTrueW( b3FloatW mask )
 {
@@ -673,6 +686,11 @@ static inline bool b3AllZeroW( b3FloatW a )
 
 	// If all elements are zero, the mask will be 0xF (1111 in binary)
 	return mask == 0xF;
+}
+
+static inline bool b3AllTrueW( b3FloatW mask )
+{
+	return _mm_movemask_ps( mask ) == 0xF;
 }
 
 static inline bool b3AnyTrueW( b3FloatW mask )
@@ -866,6 +884,11 @@ static inline bool b3AllZeroW( b3FloatW a )
 	return a.x == 0.0f && a.y == 0.0f && a.z == 0.0f && a.w == 0.0f;
 }
 
+static inline bool b3AllTrueW( b3FloatW mask )
+{
+	return mask.x != 0.0f && mask.y != 0.0f && mask.z != 0.0f && mask.w != 0.0f;
+}
+
 static inline bool b3AnyTrueW( b3FloatW mask )
 {
 	return mask.x != 0.0f || mask.y != 0.0f || mask.z != 0.0f || mask.w != 0.0f;
@@ -921,3 +944,198 @@ static inline int b3MinIndexW( b3FloatW a, int bitCount )
 }
 
 #endif
+
+// Wide vec2
+typedef struct b3Vec2W
+{
+	b3FloatW x, y;
+} b3Vec2W;
+
+// Wide vec3
+typedef struct b3Vec3W
+{
+	b3FloatW X, Y, Z;
+} b3Vec3W;
+
+// Wide quaternion
+typedef struct b3QuatW
+{
+	b3Vec3W V;
+	b3FloatW S;
+} b3QuatW;
+
+// Wide symmetric matrix2
+typedef struct b3SymMatrix2W
+{
+	b3FloatW cxx, cxy, cyy;
+} b3SymMatrix2W;
+
+// Wide symmetric matrix3
+typedef struct b3SymMatrix3W
+{
+	b3FloatW cxx, cxy, cxz, cyy, cyz, czz;
+} b3SymMatrix3W;
+
+// s * a
+static inline b3Vec3W b3MulSVW( b3FloatW s, b3Vec3W a )
+{
+	return (b3Vec3W){ b3MulW( s, a.X ), b3MulW( s, a.Y ), b3MulW( s, a.Z ) };
+}
+
+// a - s * b
+static inline b3Vec3W b3MulSubSVW( b3Vec3W a, b3FloatW s, b3Vec3W b )
+{
+	return (b3Vec3W){ b3SubW( a.X, b3MulW( s, b.X ) ), b3SubW( a.Y, b3MulW( s, b.Y ) ), b3SubW( a.Z, b3MulW( s, b.Z ) ) };
+}
+
+// a + s * b
+static inline b3Vec3W b3MulAddSVW( b3Vec3W a, b3FloatW s, b3Vec3W b )
+{
+	return (b3Vec3W){ b3AddW( a.X, b3MulW( s, b.X ) ), b3AddW( a.Y, b3MulW( s, b.Y ) ), b3AddW( a.Z, b3MulW( s, b.Z ) ) };
+}
+
+// a + b
+static inline b3Vec2W b3AddV2W( b3Vec2W a, b3Vec2W b )
+{
+	return (b3Vec2W){
+		b3AddW( a.x, b.x ),
+		b3AddW( a.y, b.y ),
+	};
+}
+
+// a - b
+static inline b3Vec3W b3SubVW( b3Vec3W a, b3Vec3W b )
+{
+	return (b3Vec3W){
+		b3SubW( a.X, b.X ),
+		b3SubW( a.Y, b.Y ),
+		b3SubW( a.Z, b.Z ),
+	};
+}
+
+// a + b
+static inline b3Vec3W b3AddVW( b3Vec3W a, b3Vec3W b )
+{
+	return (b3Vec3W){
+		b3AddW( a.X, b.X ),
+		b3AddW( a.Y, b.Y ),
+		b3AddW( a.Z, b.Z ),
+	};
+}
+
+// m * a
+static inline b3Vec2W b3MulMV2W( b3SymMatrix2W m, b3Vec2W a )
+{
+	b3Vec2W b = {
+		b3AddW( b3MulW( m.cxx, a.x ), b3MulW( m.cxy, a.y ) ),
+		b3AddW( b3MulW( m.cxy, a.x ), b3MulW( m.cyy, a.y ) ),
+	};
+
+	return b;
+}
+
+// m * a
+static inline b3Vec3W b3MulMVW( b3SymMatrix3W m, b3Vec3W a )
+{
+	b3Vec3W b = {
+		b3AddW( b3MulW( m.cxx, a.X ), b3AddW( b3MulW( m.cxy, a.Y ), b3MulW( m.cxz, a.Z ) ) ),
+		b3AddW( b3MulW( m.cxy, a.X ), b3AddW( b3MulW( m.cyy, a.Y ), b3MulW( m.cyz, a.Z ) ) ),
+		b3AddW( b3MulW( m.cxz, a.X ), b3AddW( b3MulW( m.cyz, a.Y ), b3MulW( m.czz, a.Z ) ) ),
+	};
+
+	return b;
+}
+
+// a - m * b
+static inline b3Vec3W b3MulSubMVW( b3Vec3W a, b3SymMatrix3W m, b3Vec3W b )
+{
+	b3Vec3W c = {
+		b3AddW( b3MulW( m.cxx, b.X ), b3AddW( b3MulW( m.cxy, b.Y ), b3MulW( m.cxz, b.Z ) ) ),
+		b3AddW( b3MulW( m.cxy, b.X ), b3AddW( b3MulW( m.cyy, b.Y ), b3MulW( m.cyz, b.Z ) ) ),
+		b3AddW( b3MulW( m.cxz, b.X ), b3AddW( b3MulW( m.cyz, b.Y ), b3MulW( m.czz, b.Z ) ) ),
+	};
+
+	return (b3Vec3W){ b3SubW( a.X, c.X ), b3SubW( a.Y, c.Y ), b3SubW( a.Z, c.Z ) };
+}
+
+// a + m * b
+static inline b3Vec3W b3MulAddMVW( b3Vec3W a, b3SymMatrix3W m, b3Vec3W b )
+{
+	b3Vec3W c = {
+		b3AddW( b3MulW( m.cxx, b.X ), b3AddW( b3MulW( m.cxy, b.Y ), b3MulW( m.cxz, b.Z ) ) ),
+		b3AddW( b3MulW( m.cxy, b.X ), b3AddW( b3MulW( m.cyy, b.Y ), b3MulW( m.cyz, b.Z ) ) ),
+		b3AddW( b3MulW( m.cxz, b.X ), b3AddW( b3MulW( m.cyz, b.Y ), b3MulW( m.czz, b.Z ) ) ),
+	};
+
+	return (b3Vec3W){ b3AddW( a.X, c.X ), b3AddW( a.Y, c.Y ), b3AddW( a.Z, c.Z ) };
+}
+
+static inline b3Vec3W b3AbsVW( b3Vec3W a )
+{
+	return (b3Vec3W){
+		b3AbsV( a.X ),
+		b3AbsV( a.Y ),
+		b3AbsV( a.Z ),
+	};
+}
+
+static inline b3Vec3W b3SignVW( b3Vec3W a )
+{
+	b3FloatW zero = b3ZeroW();
+	b3FloatW one = b3SplatW( 1.0f );
+	b3FloatW negOne = b3SplatW( -1.0f );
+
+	return (b3Vec3W){
+		b3BlendW( one, negOne, b3GreaterThanW( zero, a.X ) ),
+		b3BlendW( one, negOne, b3GreaterThanW( zero, a.Y ) ),
+		b3BlendW( one, negOne, b3GreaterThanW( zero, a.Z ) ),
+	};
+}
+
+static inline b3Vec3W b3ClampVW( b3Vec3W a, b3Vec3W min, b3Vec3W max )
+{
+	return (b3Vec3W){
+		b3MaxW( min.X, b3MinW( max.X, a.X ) ),
+		b3MaxW( min.Y, b3MinW( max.Y, a.Y ) ),
+		b3MaxW( min.Z, b3MinW( max.Z, a.Z ) ),
+	};
+}
+
+static inline b3Vec3W b3SelectVW( b3Vec3W mask, b3Vec3W a, b3Vec3W b )
+{
+	return (b3Vec3W){
+		b3BlendW( b.X, a.X, mask.X ),
+		b3BlendW( b.Y, a.Y, mask.Y ),
+		b3BlendW( b.Z, a.Z, mask.Z ),
+	};
+}
+
+static inline b3FloatW b3DotW( b3Vec3W a, b3Vec3W b )
+{
+	return b3AddW( b3AddW( b3MulW( a.X, b.X ), b3MulW( a.Y, b.Y ) ), b3MulW( a.Z, b.Z ) );
+}
+
+static inline b3Vec3W b3CrossW( b3Vec3W a, b3Vec3W b )
+{
+	b3Vec3W c;
+	c.X = b3SubW( b3MulW( a.Y, b.Z ), b3MulW( a.Z, b.Y ) );
+	c.Y = b3SubW( b3MulW( a.Z, b.X ), b3MulW( a.X, b.Z ) );
+	c.Z = b3SubW( b3MulW( a.X, b.Y ), b3MulW( a.Y, b.X ) );
+	return c;
+}
+
+static inline b3Vec3W b3RotateVectorW( b3QuatW q, b3Vec3W a )
+{
+	b3Vec3W t1 = b3CrossW( q.V, a );
+	b3Vec3W t2;
+	t2.X = b3MulAddW( t1.X, q.S, a.X );
+	t2.Y = b3MulAddW( t1.Y, q.S, a.Y );
+	t2.Z = b3MulAddW( t1.Z, q.S, a.Z );
+	b3Vec3W t3 = b3CrossW( q.V, t2 );
+	b3FloatW two = b3SplatW( 2.0f );
+	b3Vec3W b;
+	b.X = b3MulAddW( a.X, two, t3.X );
+	b.Y = b3MulAddW( a.Y, two, t3.Y );
+	b.Z = b3MulAddW( a.Z, two, t3.Z );
+	return b;
+}

@@ -221,7 +221,7 @@ void b3CreateContact( b3World* world, b3Shape* shapeA, b3Shape* shapeB, int chil
 		contact->flags |= b3_contactRecycleFlag;
 	}
 
-	if ( shapeA->type == b3_meshShape || shapeA->type == b3_heightShape || shapeA->type == b3_voxelShape )
+	if ( shapeA->type == b3_meshShape || shapeA->type == b3_heightShape )
 	{
 		contact->flags |= b3_simMeshContact;
 	}
@@ -232,6 +232,10 @@ void b3CreateContact( b3World* world, b3Shape* shapeA, b3Shape* shapeB, int chil
 		{
 			contact->flags |= b3_simMeshContact;
 		}
+	}
+	else if ( shapeA->type == b3_voxelShape )
+	{
+		contact->flags |= b3_simVoxelContact;
 	}
 
 	// todo impose these restrictions to make life easier
@@ -437,6 +441,10 @@ void b3DestroyContact( b3World* world, b3Contact* contact, bool wakeBodies )
 	{
 		b3Array_Destroy( contact->meshContact.triangleCache );
 	}
+	else if ( contact->flags & b3_simVoxelContact )
+	{
+		b3Array_Destroy( contact->voxelContact.voxelCache );
+	}
 
 	// Remove contact from the array that owns it
 	if ( contact->islandId != B3_NULL_INDEX )
@@ -448,7 +456,7 @@ void b3DestroyContact( b3World* world, b3Contact* contact, bool wakeBodies )
 	{
 		// contact is an active constraint
 		B3_ASSERT( contact->setIndex == b3_awakeSet );
-		bool meshContact = contact->flags & b3_simMeshContact;
+		bool meshContact = contact->flags & ( b3_simMeshContact | b3_simVoxelContact );
 		b3RemoveContactFromGraph( world, bodyIdA, bodyIdB, contact->colorIndex, contact->localIndex, meshContact );
 	}
 	else

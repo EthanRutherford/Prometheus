@@ -470,6 +470,10 @@ void b3DestroyWorld( b3WorldId worldId )
 			{
 				b3Array_Destroy( contact->meshContact.triangleCache );
 			}
+			else if ( contact->flags & b3_simVoxelContact )
+			{
+				b3Array_Destroy( contact->voxelContact.voxelCache );
+			}
 		}
 	}
 
@@ -754,7 +758,7 @@ static void b3CollideTask( int startIndex, int endIndex, int workerIndex, void* 
 		}
 
 		// Update the mesh contact spec
-		if ( touching == true && wasTouching == true && ( contact->flags & b3_simMeshContact ) )
+		if ( touching == true && wasTouching == true && ( contact->flags & ( b3_simMeshContact | b3_simVoxelContact ) ) )
 		{
 			B3_ASSERT( contact->colorIndex != B3_NULL_INDEX );
 			B3_ASSERT( 0 <= contact->colorIndex && contact->colorIndex < B3_GRAPH_COLOR_COUNT );
@@ -1016,7 +1020,7 @@ static void b3Collide( b3StepContext* context )
 
 				b3AddNonTouchingContact( world, contact );
 
-				bool isMeshContact = contact->flags & b3_simMeshContact;
+				bool isMeshContact = contact->flags & ( b3_simMeshContact | b3_simVoxelContact );
 				b3RemoveContactFromGraph( world, bodyIdA, bodyIdB, colorIndex, localIndex, isMeshContact );
 				contact = NULL;
 			}
@@ -1446,7 +1450,7 @@ void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits )
 				b3WorldTransform transform = { bodySim->center, bodySim->transform.q };
 				draw->DrawTransformFcn( transform, draw->context );
 
-				if (body->type == b3_dynamicBody)
+				if ( body->type == b3_dynamicBody )
 				{
 					b3Vec3 offset = { 0.05f, 0.05f, 0.05f };
 					b3Pos p = b3TransformWorldPoint( transform, offset );
@@ -4006,7 +4010,8 @@ void b3ValidateContacts( b3World* world )
 					B3_ASSERT( contact->bodySimIndexB == bodyB->localIndex );
 				}
 
-				if ( ( contact->flags & b3_simMeshContact ) != 0 || contact->colorIndex == B3_OVERFLOW_INDEX )
+				if ( ( contact->flags & ( b3_simMeshContact | b3_simVoxelContact ) ) != 0 ||
+					 contact->colorIndex == B3_OVERFLOW_INDEX )
 				{
 					b3GraphColor* color = graph->colors + contact->colorIndex;
 					int contactId = b3Array_Get( color->contacts, contact->localIndex )->contactId;
