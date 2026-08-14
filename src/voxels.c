@@ -697,6 +697,9 @@ void b3QueryVoxels( const b3VoxelData* voxels, b3AABB query, b3VoxelIteratorFcn*
 	// define the bounds in voxel coordinates
 	b3Vec3 lowerBound = b3Max( b3Floor( query.lowerBound ), voxels->bounds.lowerBound );
 	b3Vec3 upperBound = b3Sub( b3Min( b3Ceil( query.upperBound ), voxels->bounds.upperBound ), b3Vec3Of( 1.0f ) );
+	if ( lowerBound.x > upperBound.x || lowerBound.y > upperBound.y || lowerBound.z > upperBound.z )
+		return; // no voxels in the query bounds
+
 	ui3 lower = { (uint32_t)lowerBound.x, (uint32_t)lowerBound.y, (uint32_t)lowerBound.z };
 	ui3 upper = { (uint32_t)upperBound.x, (uint32_t)upperBound.y, (uint32_t)upperBound.z };
 
