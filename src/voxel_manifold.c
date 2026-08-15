@@ -15,18 +15,12 @@
 #define POINT_BUFFER_CAPACITY 256
 #define POINT_RECYCLE_TOL_2 ( B3_LINEAR_SLOP * B3_LINEAR_SLOP )
 
-typedef union
-{
-	uint32_t i[4];
-	b3FloatW v;
-} MaskW;
-
-static const MaskW b3_negXNeighborW = { b3_negXNeighbor, b3_negXNeighbor, b3_negXNeighbor, b3_negXNeighbor };
-static const MaskW b3_posXNeighborW = { b3_posXNeighbor, b3_posXNeighbor, b3_posXNeighbor, b3_posXNeighbor };
-static const MaskW b3_negYNeighborW = { b3_negYNeighbor, b3_negYNeighbor, b3_negYNeighbor, b3_negYNeighbor };
-static const MaskW b3_posYNeighborW = { b3_posYNeighbor, b3_posYNeighbor, b3_posYNeighbor, b3_posYNeighbor };
-static const MaskW b3_negZNeighborW = { b3_negZNeighbor, b3_negZNeighbor, b3_negZNeighbor, b3_negZNeighbor };
-static const MaskW b3_posZNeighborW = { b3_posZNeighbor, b3_posZNeighbor, b3_posZNeighbor, b3_posZNeighbor };
+// predefine some SIMD constants.
+static const b3FloatW zeroW = B3_STATIC_FLOAT_W( 0.0f );
+static const b3FloatW oneW = B3_STATIC_FLOAT_W( 1.0f );
+static const b3FloatW epsilonW = B3_STATIC_FLOAT_W( 1000.0f * FLT_MIN );
+static const b3Vec3W zeroVW = { B3_STATIC_FLOAT_W( 0.0f ), B3_STATIC_FLOAT_W( 0.0f ), B3_STATIC_FLOAT_W( 0.0f ) };
+static const b3Vec3W oneVW = { B3_STATIC_FLOAT_W( 1.0f ), B3_STATIC_FLOAT_W( 1.0f ), B3_STATIC_FLOAT_W( 1.0f ) };
 
 typedef struct VoxelWide
 {
@@ -35,8 +29,8 @@ typedef struct VoxelWide
 	b3Vec3W point;
 	b3Vec3W normal;
 	b3FloatW separation;
-	MaskW flags;
-	MaskW accepted;
+	b3FloatW flags;
+	b3FloatW accepted;
 } VoxelWide;
 
 typedef struct CacheRefreshContext
@@ -73,20 +67,26 @@ typedef struct VoxCollideContext
 // builds a mask that can be used to detect if a voxel has a neighbor that is closer to the candidate point than itself.
 // This is used to cull contact points early, knowing that there is at least one coplanar voxel that can generate a deeper
 // contact point. This early culling helps reduce load on the later clustering algorithm, which can cull additional points.
-static MaskW getNeighborMaskW( const b3Vec3W candidate, const b3Vec3W voxMin, const b3Vec3W voxMax )
+static b3FloatW getNeighborMaskW( const b3Vec3W candidate, const b3Vec3W voxMin, const b3Vec3W voxMax )
 {
+	static const b3FloatW b3_negXNeighborW = B3_STATIC_MASK_W( b3_negXNeighbor );
+	static const b3FloatW b3_posXNeighborW = B3_STATIC_MASK_W( b3_posXNeighbor );
+	static const b3FloatW b3_negYNeighborW = B3_STATIC_MASK_W( b3_negYNeighbor );
+	static const b3FloatW b3_posYNeighborW = B3_STATIC_MASK_W( b3_posYNeighbor );
+	static const b3FloatW b3_negZNeighborW = B3_STATIC_MASK_W( b3_negZNeighbor );
+	static const b3FloatW b3_posZNeighborW = B3_STATIC_MASK_W( b3_posZNeighbor );
+
 	// this is effectively an AABB SAT test, resulting in a mask of the separating axes.
 	// if a voxel has a neighbor along a separating axis, that neighbor is closer to the candidate point.
 	// An extra bonus, this also filters out any contact points which would have a normal pointed into
 	// a neighboring voxel, which is not a valid contact point for collision resolution.
-	b3FloatW zero = b3ZeroW();
-	MaskW neighborMask = { 0, 0, 0, 0 };
-	neighborMask.v = b3OrW( neighborMask.v, b3BlendW( zero, b3_negXNeighborW.v, b3LessThanW( candidate.X, voxMin.X ) ) );
-	neighborMask.v = b3OrW( neighborMask.v, b3BlendW( zero, b3_posXNeighborW.v, b3GreaterThanW( candidate.X, voxMax.X ) ) );
-	neighborMask.v = b3OrW( neighborMask.v, b3BlendW( zero, b3_negYNeighborW.v, b3LessThanW( candidate.Y, voxMin.Y ) ) );
-	neighborMask.v = b3OrW( neighborMask.v, b3BlendW( zero, b3_posYNeighborW.v, b3GreaterThanW( candidate.Y, voxMax.Y ) ) );
-	neighborMask.v = b3OrW( neighborMask.v, b3BlendW( zero, b3_negZNeighborW.v, b3LessThanW( candidate.Z, voxMin.Z ) ) );
-	neighborMask.v = b3OrW( neighborMask.v, b3BlendW( zero, b3_posZNeighborW.v, b3GreaterThanW( candidate.Z, voxMax.Z ) ) );
+	b3FloatW neighborMask = { 0, 0, 0, 0 };
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_negXNeighborW, b3LessThanW( candidate.X, voxMin.X ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posXNeighborW, b3GreaterThanW( candidate.X, voxMax.X ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_negYNeighborW, b3LessThanW( candidate.Y, voxMin.Y ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posYNeighborW, b3GreaterThanW( candidate.Y, voxMax.Y ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_negZNeighborW, b3LessThanW( candidate.Z, voxMin.Z ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posZNeighborW, b3GreaterThanW( candidate.Z, voxMax.Z ) ) );
 	return neighborMask;
 }
 
@@ -176,11 +176,6 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 	}
 
 	// create wide vectors for intersection parameters
-	b3FloatW zeroW = b3ZeroW();
-	b3FloatW oneW = b3SplatW( 1.0f );
-	b3Vec3W zeroVW = { zeroW, zeroW, zeroW };
-	b3Vec3W oneVW = { oneW, oneW, oneW };
-	b3FloatW epsilonW = b3SplatW( 1000.0f * FLT_MIN );
 	b3FloatW maxDist2W = b3SplatW( maxDist2 );
 	b3FloatW scale = b3SplatW( voxelsA.scale );
 	b3FloatW radiusW = b3SplatW( radius );
@@ -195,12 +190,12 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 		// if there is a neighboring voxel which is closer to the sphere center than this voxel, then skip this one.
 		// A neighboring voxel means we are part of an edge/surface, and we ideally only generate one contact point per
 		// edge/surface. This reduces the number of contact points the manifold clustering algorithm needs to process.
-		MaskW neighborMask = getNeighborMaskW( centerW, vox->min, vox->max );
-		MaskW neighborResults = { .v = b3AndW( vox->flags.v, neighborMask.v ) };
-		if ( b3AllTrueW( neighborResults.v ) )
+		b3FloatW neighborMask = getNeighborMaskW( centerW, vox->min, vox->max );
+		b3FloatW neighborResults = b3AndW( vox->flags, neighborMask );
+		if ( b3AllTrueW( neighborResults ) )
 			continue;
 
-		vox->accepted.v = b3EqualsW( neighborResults.v, zeroW );
+		vox->accepted = b3EqualsW( neighborResults, zeroW );
 	}
 
 	// Step 2: compact the accepted candidates down in-place
@@ -209,7 +204,7 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 	{
 		int wi = i / B3_SIMD_WIDTH;
 		int li = i % B3_SIMD_WIDTH;
-		if ( wideVoxels[wi].accepted.i[li] != 0 )
+		if ( ( (int*)&wideVoxels[wi].accepted )[li] != 0 )
 		{
 			if ( i != acceptedCount )
 			{
@@ -252,8 +247,8 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 		// compute the squared distance from the closest point to the sphere center
 		b3Vec3W d = b3SubVW( centerW, closestPoint );
 		b3FloatW dist2 = b3DotW( d, d );
-		vox->accepted.v = b3AndW( b3GreaterThanW( dist2, epsilonW ), b3LessThanW( dist2, maxDist2W ) );
-		if ( !b3AnyTrueW( vox->accepted.v ) )
+		vox->accepted = b3AndW( b3GreaterThanW( dist2, epsilonW ), b3LessThanW( dist2, maxDist2W ) );
+		if ( !b3AnyTrueW( vox->accepted ) )
 			continue;
 
 		// compute the voxel normal, which is always axis-aligned. The normal points
@@ -275,7 +270,7 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 
 		for ( int lane = 0; lane < B3_SIMD_WIDTH; lane++ )
 		{
-			if ( vox->accepted.i[lane] == 0 )
+			if ( ( (int*)&vox->accepted )[lane] == 0 )
 				continue;
 
 			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;

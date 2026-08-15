@@ -14,12 +14,18 @@
 // wide float holds 4 numbers
 typedef float32x4_t b3FloatW;
 
+#define B3_STATIC_FLOAT_W( x ) { .f32 = { (x), (x), (x), (x) } }
+#define B3_STATIC_MASK_W( x ) { .n32 = { (x), (x), (x), (x) } }
+
 #elif defined( B3_SIMD_SSE2 )
 
 #include <emmintrin.h>
 
 // wide float holds 4 numbers
 typedef __m128 b3FloatW;
+
+#define B3_STATIC_FLOAT_W( x ) { .m128_f32 = { (x), (x), (x), (x) } }
+#define B3_STATIC_MASK_W( x ) { .m128_i32 = { (x), (x), (x), (x) } }
 
 #else
 
@@ -31,6 +37,9 @@ typedef struct b3FloatW
 {
 	float x, y, z, w;
 } b3FloatW;
+
+#define B3_STATIC_FLOAT_W( x ) { .x = (x), .y = (x), .z = (x), .w = (x) }
+#define B3_STATIC_MASK_W( x ) { .x = *(float)&(int){x}, .y = *(float)&(int){x}, .z = *(float)&(int){x}, .w = *(float)&(int){x} }
 
 #endif
 
