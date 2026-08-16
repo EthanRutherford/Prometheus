@@ -1148,3 +1148,8 @@ static inline b3Vec3W b3RotateVectorW( b3QuatW q, b3Vec3W a )
 	b.Z = b3MulAddW( a.Z, two, t3.Z );
 	return b;
 }
+
+static inline b3Vec3W b3Vec3WOf( b3FloatW v )
+{
+	return (b3Vec3W){ v, v, v };
+}

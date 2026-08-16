@@ -254,8 +254,13 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 		// compute the voxel normal, which is always axis-aligned. The normal points
 		// towards the sphere center, so the axis with the largest component is the normal axis.
 		b3Vec3W absD = b3AbsVW( d );
-		b3FloatW maxAxis = b3MaxW( absD.X, b3MaxW( absD.Y, absD.Z ) );
-		b3Vec3W axisMask = { b3EqualsW( absD.X, maxAxis ), b3EqualsW( absD.Y, maxAxis ), b3EqualsW( absD.Z, maxAxis ) };
+		b3Vec3W xgty = b3Vec3WOf( b3GreaterThanW( absD.X, absD.Y ) );
+		b3Vec3W xgtz = b3Vec3WOf( b3GreaterThanW( absD.X, absD.Z ) );
+		b3Vec3W ygtz = b3Vec3WOf( b3GreaterThanW( absD.Y, absD.Z ) );
+		static const b3Vec3W xAxis = { B3_STATIC_MASK_W( 0xFFFFFFFF ), B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0 ) };
+		static const b3Vec3W yAxis = { B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0xFFFFFFFF ), B3_STATIC_MASK_W( 0 ) };
+		static const b3Vec3W zAxis = { B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0xFFFFFFFF ) };
+		b3Vec3W axisMask = b3SelectVW( xgty, b3SelectVW( xgtz, xAxis, zAxis ), b3SelectVW( ygtz, yAxis, zAxis ) );
 		vox->normal = b3SelectVW( axisMask, b3SignVW( d ), zeroVW );
 
 		// descale the point and compute separation
@@ -418,11 +423,11 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 			// compute the voxel normal, which is always axis-aligned. The normal points
 			// towards the capsule segment closest point, so the axis with the largest component is the normal axis.
 			b3Vec3 absD = b3Abs( bestD[j] );
-			float maxAxis = max( absD.x, max( absD.y, absD.z ) );
-			b3Vec3i axisMask = { absD.x == maxAxis, absD.y == maxAxis, absD.z == maxAxis };
+			b3Vec3i axisMask = absD.x > absD.y ? ( absD.x > absD.z ? (b3Vec3i){ 1, 0, 0 } : (b3Vec3i){ 0, 0, 1 } )
+											   : ( absD.y > absD.z ? (b3Vec3i){ 0, 1, 0 } : (b3Vec3i){ 0, 0, 1 } );
 			b3Vec3 normal = b3Select( axisMask, b3Sign( bestD[j] ), b3Vec3_zero );
 
-			// add a manifold and point for the contact
+			// add a candidate point for the contact
 			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
 			cp->point = b3MulSV( voxelsA.scale, bestPVox[j] );
 			cp->normal = normal;
@@ -460,7 +465,7 @@ static void initClusters( VoxCluster* clusters, b3LocalManifoldPoint* clusterPoi
 	clusters[4].normal.z = -1.0f;
 	clusters[5].normal.z = 1.0f;
 
-	for ( int i = 0; i < 6; ++i )
+	for ( int i = 0; i < 6; i++ )
 	{
 		VoxCluster* cluster = clusters + i;
 		cluster->points = clusterPoints;
@@ -505,7 +510,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	}
 	else if ( shapeB->type == b3_hullShape )
 	{
-		context.hullB = &shapeB->hull;
+		context.hullB = shapeB->hull;
 		collideVoxHull( &context, transformBtoA, arena );
 	}
 	else
@@ -534,7 +539,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	// This allows for several assumptions that make this faster than the mesh clustering logic.
 	VoxCluster clusters[6] = { 0 };
 	int* clusterMemberships = b3Bump( &arena, context.pointCount * sizeof( int ) );
-	for ( int i = 0; i < context.pointCount; ++i )
+	for ( int i = 0; i < context.pointCount; i++ )
 	{
 		VoxCandidatePoint* cp = context.pointBuffer + i;
 		int clusterIdx = clusterIndex( cp->normal );
@@ -548,7 +553,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	initClusters( clusters, clusterPoints );
 
 	// Clone candidate points into the clusters
-	for ( int i = 0; i < context.pointCount; ++i )
+	for ( int i = 0; i < context.pointCount; i++ )
 	{
 		VoxCandidatePoint* cp = context.pointBuffer + i;
 		int clusterIdx = clusterMemberships[i];
@@ -560,7 +565,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 
 	// Reduce clusters
 	int clusterCount = 0;
-	for ( int i = 0; i < 6; ++i )
+	for ( int i = 0; i < 6; i++ )
 	{
 		VoxCluster* cluster = clusters + i;
 		if ( cluster->count == 0 )
@@ -568,6 +573,23 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 
 		cluster->count = b3ReduceCluster( cluster->points, cluster->count, cluster->normal, arena );
 		clusterCount++;
+
+		// filter out any duplicate points in the cluster. Collisions that land on a voxel border
+		// can be reported by both neighbors, so we need to remove duplicates to avoid jittering.
+		for ( int j = 0; j < cluster->count; j++ )
+		{
+			for ( int k = j + 1; k < cluster->count; k++ )
+			{
+				b3LocalManifoldPoint* ptA = cluster->points + j;
+				b3LocalManifoldPoint* ptB = cluster->points + k;
+				if ( b3DistanceSquared( ptA->point, ptB->point ) < FLT_EPSILON * FLT_EPSILON )
+				{
+					cluster->points[k] = cluster->points[cluster->count - 1];
+					cluster->count--;
+					k--;
+				}
+			}
+		}
 	}
 
 	// Make a temporary copy of previous manifolds
@@ -618,7 +640,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 		float bestDot = normalMatchTolerance;
 		int bestIndex = B3_NULL_INDEX;
 
-		for ( int j = 0; j < oldManifoldCount; ++j )
+		for ( int j = 0; j < oldManifoldCount; j++ )
 		{
 			if ( consumed[j] == true )
 			{
@@ -643,21 +665,21 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 			consumed[bestIndex] = true;
 		}
 
-		for ( int j = 0; j < pointCount; ++j )
+		for ( int j = 0; j < pointCount; j++ )
 		{
 			const b3LocalManifoldPoint* source = cluster->points + j;
 			b3ManifoldPoint* target = manifold->points + j;
 			// Contact points are computed in frame A
 			target->anchorA = b3MulMV( matrixA, source->point );
 			target->anchorB = b3Add( target->anchorA, b3SubPos( xfA.p, xfB.p ) );
-			target->separation = source->separation; // - restOffset;
+			target->separation = source->separation;
 			target->featureId = 1;
 
 			// Preserve normal impulse if possible
 			if ( matchedManifold != NULL )
 			{
 				int oldPointCount = matchedManifold->pointCount;
-				for ( int k = 0; k < oldPointCount; ++k )
+				for ( int k = 0; k < oldPointCount; k++ )
 				{
 					b3ManifoldPoint* oldPt = matchedManifold->points + k;
 
@@ -697,11 +719,11 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 			materialIndices = b3GetHeightFieldMaterialIndices( shapeA->heightField );
 		}
 
-		for ( int i = 0; i < clusterCount; ++i )
+		for ( int i = 0; i < clusterCount; i++ )
 		{
 			b3Manifold* manifold = contact->manifolds + i;
 			int pointCount = manifold->pointCount;
-			for ( int j = 0; j < pointCount; ++j )
+			for ( int j = 0; j < pointCount; j++ )
 			{
 				int triangleIndex = manifold->points[j].triangleIndex;
 				int materialIndex;
