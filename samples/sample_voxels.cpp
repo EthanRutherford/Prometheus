@@ -595,3 +595,83 @@ private:
 };
 
 static int sampleVoxelCapsuleCollision = RegisterSample( "Voxels", "Voxel Capsule Collision", VoxelCapsuleCollision::Create );
+
+class VoxelHullCollision : public Sample
+{
+public:
+	explicit VoxelHullCollision( SampleContext* context )
+		: Sample( context )
+	{
+		if ( context->restart == false )
+		{
+			m_camera->SetView( 30.0f, 20.0f, 30.0f, b3Pos_zero );
+		}
+
+		AddGroundBox( 20.0f );
+
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
+
+		m_voxelsFlat = createVoxelBox( 50, 5, 50 );
+		bodyDef.type = b3BodyType::b3_staticBody;
+		bodyDef.position = b3ToPos( b3Sub( { -10.0f, 1.0f, 0.0f }, getVoxelCentroid( m_voxelsFlat, 0.1f ) ) );
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId voxelBody1 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateVoxelShape( voxelBody1, &shapeDef, m_voxelsFlat, 0.1f );
+		b3Vec3 center = b3MulSV( 0.1f, b3AABB_Center( m_voxelsFlat->bounds ) );
+
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { -10.0f, 3.0f, 0.0f };
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId cubeBody = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateHullShape( cubeBody, &shapeDef, &box.base );
+
+		m_voxelsAngled = createVoxelBox( 50, 5, 100 );
+		bodyDef.type = b3BodyType::b3_staticBody;
+		bodyDef.position = b3ToPos( b3Sub( { 0.0f, 2.0f, 0.0f }, getVoxelCentroid( m_voxelsAngled, 0.1f ) ) );
+		bodyDef.rotation = b3MakeQuatFromAxisAngle( b3Vec3_axisX, 0.0625 * B3_PI );
+		b3BodyId voxelBody2 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateVoxelShape( voxelBody2, &shapeDef, m_voxelsAngled, 0.1f );
+
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { 0.0f, 3.0f, 0.0f };
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId cubeBody2 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateHullShape( cubeBody2, &shapeDef, &box.base );
+
+		m_voxelsTorus = createVoxelTorus( 10.0f, 6.0f );
+		bodyDef.type = b3BodyType::b3_staticBody;
+		b3Vec3 rotatedCenter =
+			b3RotateVector( b3MakeQuatFromAxisAngle( b3Vec3_axisX, 0.5 * B3_PI ), getVoxelCentroid( m_voxelsTorus, 0.1f ) );
+		bodyDef.position = b3ToPos( b3Sub( { 10.0f, 1.0f, 0.0f }, rotatedCenter ) );
+		bodyDef.rotation = b3MakeQuatFromAxisAngle( b3Vec3_axisX, 0.5 * B3_PI );
+		b3BodyId voxelBody3 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateVoxelShape( voxelBody3, &shapeDef, m_voxelsTorus, 0.1f );
+
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { 10.0f, 3.0f, 0.0f };
+		bodyDef.rotation = b3Quat_identity;
+		b3BodyId cubeBody3 = b3CreateBody( m_worldId, &bodyDef );
+		b3CreateHullShape( cubeBody3, &shapeDef, &box.base );
+	}
+
+	~VoxelHullCollision() override
+	{
+		b3DestroyVoxels( m_voxelsFlat );
+		b3DestroyVoxels( m_voxelsAngled );
+		b3DestroyVoxels( m_voxelsTorus );
+	}
+
+	static Sample* Create( SampleContext* context )
+	{
+		return new VoxelHullCollision( context );
+	}
+
+private:
+	b3VoxelData* m_voxelsFlat = nullptr;
+	b3VoxelData* m_voxelsAngled = nullptr;
+	b3VoxelData* m_voxelsTorus = nullptr;
+};
+
+static int sampleVoxelHullCollision = RegisterSample( "Voxels", "Voxel Hull Collision", VoxelHullCollision::Create );

@@ -438,7 +438,117 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 
 static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
 {
-	printf( "collideVoxHull not implemented\n" );
+	const b3Voxels voxelsA = context->voxelsA;
+	float invScale = 1.0f / voxelsA.scale;
+	float specDist = B3_SPECULATIVE_DISTANCE * invScale;
+	b3Vec3 hullCenter = b3MulSV( invScale, b3TransformPoint( bToA, context->hullB->center ) );
+
+	// compute the query bounds for the voxel grid. This is the AABB of the hull expanded by the speculative distance.
+	b3AABB hullAABB = b3ComputeHullAABB( context->hullB, bToA );
+	b3AABB queryBounds =
+		computeVoxelBounds( voxelsA.data, b3Sub( b3MulSV( invScale, hullAABB.lowerBound ), b3Vec3Of( specDist ) ),
+							b3Add( b3MulSV( invScale, hullAABB.upperBound ), b3Vec3Of( specDist ) ) );
+
+	// refresh the voxel cache
+	refreshVoxCache( context->contact, voxelsA.data, queryBounds );
+
+	if ( context->contact->voxelCache.count == 0 )
+		return;
+
+	// gather the hull vertices in voxel space, and filter out any that are outside the expanded voxel bounds.
+	b3AABB voxelsBounds = b3AABB_Inflate( voxelsA.data->bounds, specDist );
+	const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
+	b3Vec3* hullVerts = b3Bump( &arena, context->hullB->vertexCount * sizeof( b3Vec3 ) );
+	int vertCount = 0;
+	for ( int i = 0; i < context->hullB->vertexCount; i++ )
+	{
+		b3Vec3 pt = b3MulSV( invScale, b3TransformPoint( bToA, hullPoints[i] ) );
+		if ( b3AABB_Contains( voxelsBounds, (b3AABB){ pt, pt } ) )
+		{
+			hullVerts[vertCount++] = pt;
+		}
+	}
+
+	// test hull vertices against voxels
+	for ( int i = 0; i < vertCount; i++ )
+	{
+		b3Vec3 pt = hullVerts[i];
+		for ( int j = 0; j < context->contact->voxelCache.count; j++ )
+		{
+			b3Vec3 voxMin = context->contact->voxelCache.data[j].min;
+			b3Vec3 voxMax = b3Add( voxMin, b3Vec3Of( 1.0f ) );
+			uint32_t flags = context->contact->voxelCache.data[j].flags;
+
+			// if there is a neighboring voxel which is closer to the hull vertex than this voxel, then skip this one.
+			uint32_t neighborMask = getNeighborMask( pt, voxMin, voxMax );
+			if ( ( flags & neighborMask ) != 0 )
+				continue;
+
+			// if the hull vertex is outside the voxel bounds, expanded by speculative distance, skip this one.
+			b3AABB voxelBounds = b3AABB_Inflate( (b3AABB){ voxMin, voxMax }, specDist );
+			if ( !b3AABB_Contains( voxelBounds, (b3AABB){ pt, pt } ) )
+				continue;
+
+			// use the neighbor flags to determine which faces are exposed, to use one as the normal.
+			// If there's more than one, use the one that points most directly towards the hull center.
+			b3Vec3 d = b3Sub( hullCenter, b3Add( voxMin, b3Vec3Of( 0.5f ) ) );
+
+			// which axes, pointed to the hull center, is neighborless
+			b3Vec3i axesMask = {
+				flags & ( d.x > 0 ? b3_posXNeighbor : b3_negXNeighbor ) ? 0 : 1,
+				flags & ( d.y > 0 ? b3_posYNeighbor : b3_negYNeighbor ) ? 0 : 1,
+				flags & ( d.z > 0 ? b3_posZNeighbor : b3_negZNeighbor ) ? 0 : 1,
+			};
+
+			if ( axesMask.x == 0 && axesMask.y == 0 && axesMask.z == 0 )
+				continue;
+
+			b3Vec3 filtered = b3Select( axesMask, d, b3Vec3_zero );
+
+			// compute the axis-aligned normal by finding the largest component of the filtered vector
+			b3Vec3 absD = b3Abs( filtered );
+			b3Vec3i axisMask = absD.x > absD.y ? ( absD.x > absD.z ? (b3Vec3i){ 1, 0, 0 } : (b3Vec3i){ 0, 0, 1 } )
+											   : ( absD.y > absD.z ? (b3Vec3i){ 0, 1, 0 } : (b3Vec3i){ 0, 0, 1 } );
+			b3Vec3 normal = b3Select( axisMask, b3Sign( filtered ), b3Vec3_zero );
+
+			// add a candidate point for the contact
+			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
+			cp->point = b3MulSV( voxelsA.scale, b3Clamp( pt, voxMin, voxMax ) );
+			cp->normal = normal;
+			cp->separation = b3Dot( normal, b3Sub( pt, b3Clamp( b3Add( voxMin, normal ), voxMin, voxMax ) ) ) * voxelsA.scale;
+		}
+	}
+
+	// gather corner and edge voxels
+	b3VoxelCache* cornerVoxels = b3Bump( &arena, context->contact->voxelCache.count * sizeof( b3VoxelCache ) );
+	int cornerCount = 0;
+	b3VoxelCache* edgeVoxels = b3Bump( &arena, context->contact->voxelCache.count * sizeof( b3VoxelCache ) );
+	int edgeCount = 0;
+	for ( int i = 0; i < context->contact->voxelCache.count; i++ )
+	{
+		b3VoxelCache* cache = &context->contact->voxelCache.data[i];
+		uint32_t flags = cache->flags;
+		if ( flags & b3_isCornerVoxel )
+		{
+			cornerVoxels[cornerCount++] = *cache;
+		}
+		else if ( flags & b3_isEdgeVoxel )
+		{
+			edgeVoxels[edgeCount++] = *cache;
+		}
+	}
+
+	// clip corner voxels against the hull, and add any that are inside as candidate points
+	for ( int i = 0; i < cornerCount; i++ )
+	{
+		// TODO
+	}
+
+	// clip edge voxels against hull edges
+	for ( int i = 0; i < edgeCount; i++ )
+	{
+		// TODO
+	}
 }
 
 static void collideVoxVox( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
