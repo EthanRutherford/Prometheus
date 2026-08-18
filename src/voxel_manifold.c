@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ethan Rutherford
 // SPDX-License-Identifier: MIT
 
+#include "bits.h"
 #include "contact.h"
 #include "manifold.h"
 #include "physics_world.h"
@@ -310,6 +311,9 @@ static uint32_t getNeighborMask( const b3Vec3 candidate, const b3Vec3 voxMin, co
 
 static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
 {
+	// This will probably be used when we simd
+	B3_UNUSED( arena );
+
 	// get the center, radius, and speculative distance of the capsule in voxel space/scale
 	const b3Voxels voxelsA = context->voxelsA;
 	float invScale = 1.0f / voxelsA.scale;
@@ -455,24 +459,171 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	if ( context->contact->voxelCache.count == 0 )
 		return;
 
-	// gather the hull vertices in voxel space, and filter out any that are outside the expanded voxel bounds.
-	b3AABB voxelsBounds = b3AABB_Inflate( voxelsA.data->bounds, specDist );
-	const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
-	b3Vec3* hullVerts = b3Bump( &arena, context->hullB->vertexCount * sizeof( b3Vec3 ) );
-	int vertCount = 0;
-	for ( int i = 0; i < context->hullB->vertexCount; i++ )
-	{
-		b3Vec3 pt = b3MulSV( invScale, b3TransformPoint( bToA, hullPoints[i] ) );
-		if ( b3AABB_Contains( voxelsBounds, (b3AABB){ pt, pt } ) )
+	// Build relevant contact data. TODO: might be smart to cache this data in the voxel shape, since
+	// we'll need to use it frequently for voxel-hull or voxel-voxel collisions.
+
+	// hull corner vertices, in voxel space.
+	b3Vec3* hullCorners = b3Bump( &arena, context->hullB->vertexCount * sizeof( b3Vec3 ) );
+	int hullCornerCount = 0;
+	// voxel corners, in hull space.
+	b3Vec3* voxelCorners = b3Bump( &arena, context->contact->voxelCache.count * 8 * sizeof( b3Vec3 ) );
+	int voxelCornerCount = 0;
+	// hull planes in hull space.
+	const b3Plane* hullPlanes = b3GetHullPlanes( context->hullB );
+
+	{ // gather hull corners in voxel space
+		b3AABB voxelsBounds = b3AABB_Inflate( voxelsA.data->bounds, specDist );
+		const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
+		for ( int i = 0; i < context->hullB->vertexCount; i++ )
 		{
-			hullVerts[vertCount++] = pt;
+			b3Vec3 pt = b3MulSV( invScale, b3TransformPoint( bToA, hullPoints[i] ) );
+			if ( b3AABB_Contains( voxelsBounds, (b3AABB){ pt, pt } ) )
+			{
+				hullCorners[hullCornerCount++] = pt;
+			}
 		}
 	}
 
+	{ // gather voxel corners in hull space
+#define VOXINHULL( v ) b3InvTransformPoint( bToA, b3MulSV( voxelsA.scale, v ) )
+		for ( int i = 0; i < context->contact->voxelCache.count; i++ )
+		{
+			if ( ( context->contact->voxelCache.data[i].flags & b3_isCornerVoxel ) == 0 )
+				continue;
+
+			// corner voxels will usually only have one corner vertex, but may have
+			// 2, 4, or 8 depending on the configuration of neighboring voxels.
+			// A corner with 0 neighbors is a free floating cube, so all 8 corners are valid.
+			// A corner voxel with 1 neighbor invalidates all corners on that face, leaving 4 valid corners.
+			// A corner voxel with 2 neighbors forms an L shape, leaving 2 valid corners.
+			// A corner voxel with 3 neighbors forms a proper corner, leaving only the single corner vertex.
+			b3Vec3 voxMin = context->contact->voxelCache.data[i].min;
+			uint32_t neighborFlags = context->contact->voxelCache.data[i].flags & b3_voxNeighborsMask;
+			int popcount = popcount_32( neighborFlags );
+			switch ( popcount )
+			{
+				// all eight corners
+				case 0:
+					voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
+					break;
+				// four corners (enumerate all possible configurations, as there's no clever tricks I can think of atm)
+				case 1:
+					switch ( neighborFlags )
+					{
+						case b3_posXNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							break;
+						case b3_negXNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
+							break;
+						case b3_posYNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+							break;
+						case b3_negYNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
+							break;
+						case b3_posZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
+							break;
+						case b3_negZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
+							break;
+					}
+					break;
+				// two corners (enumerate all possible configurations, as there's no clever tricks I can think of atm)
+				case 2:
+					switch ( neighborFlags )
+					{
+						case b3_posXNeighbor | b3_posYNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+							break;
+						case b3_posXNeighbor | b3_negYNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							break;
+						case b3_posXNeighbor | b3_posZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+							break;
+						case b3_posXNeighbor | b3_negZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 0 } ) );
+							break;
+						case b3_negXNeighbor | b3_posYNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+							break;
+						case b3_negXNeighbor | b3_negYNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
+							break;
+						case b3_negXNeighbor | b3_posZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+							break;
+						case b3_negXNeighbor | b3_negZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
+							break;
+						case b3_posYNeighbor | b3_posZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							break;
+						case b3_posYNeighbor | b3_negZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							break;
+						case b3_negYNeighbor | b3_posZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							break;
+						case b3_negYNeighbor | b3_negZNeighbor:
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
+							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
+							break;
+					}
+					break;
+				// one corner
+				case 3:
+					voxelCorners[voxelCornerCount++] = VOXINHULL(
+						b3Add( voxMin, (b3Vec3){ (float)( ( neighborFlags >> 3 ) & 1 ), (float)( ( neighborFlags >> 4 ) & 1 ),
+												 (float)( ( neighborFlags >> 5 ) & 1 ) } ) );
+					break;
+			}
+		}
+#undef VOXINHULL
+	}
+
 	// test hull vertices against voxels
-	for ( int i = 0; i < vertCount; i++ )
+	for ( int i = 0; i < hullCornerCount; i++ )
 	{
-		b3Vec3 pt = hullVerts[i];
+		b3Vec3 pt = hullCorners[i];
 		for ( int j = 0; j < context->contact->voxelCache.count; j++ )
 		{
 			b3Vec3 voxMin = context->contact->voxelCache.data[j].min;
@@ -519,36 +670,44 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 		}
 	}
 
-	// gather corner and edge voxels
-	b3VoxelCache* cornerVoxels = b3Bump( &arena, context->contact->voxelCache.count * sizeof( b3VoxelCache ) );
-	int cornerCount = 0;
-	b3VoxelCache* edgeVoxels = b3Bump( &arena, context->contact->voxelCache.count * sizeof( b3VoxelCache ) );
-	int edgeCount = 0;
-	for ( int i = 0; i < context->contact->voxelCache.count; i++ )
-	{
-		b3VoxelCache* cache = &context->contact->voxelCache.data[i];
-		uint32_t flags = cache->flags;
-		if ( flags & b3_isCornerVoxel )
-		{
-			cornerVoxels[cornerCount++] = *cache;
-		}
-		else if ( flags & b3_isEdgeVoxel )
-		{
-			edgeVoxels[edgeCount++] = *cache;
-		}
-	}
-
 	// clip corner voxels against the hull, and add any that are inside as candidate points
-	for ( int i = 0; i < cornerCount; i++ )
+	for ( int i = 0; i < voxelCornerCount; i++ )
 	{
-		// TODO
+		b3Vec3 pt = voxelCorners[i];
+
+		float bestSeparation = -FLT_MAX;
+		b3Vec3 bestNormal = { 0 };
+		int bestFace = -1;
+		for ( int j = 0; j < context->hullB->faceCount; j++ )
+		{
+			b3Plane plane = hullPlanes[j];
+			float sep = b3PlaneSeparation( plane, pt );
+			if ( sep > B3_SPECULATIVE_DISTANCE )
+			{
+				bestFace = -1;
+				break;
+			}
+
+			if ( sep > bestSeparation )
+			{
+				bestSeparation = sep;
+				bestNormal = plane.normal;
+				bestFace = j;
+			}
+		}
+
+		// found a separating axis, so this voxel corner is outside the hull + speculative distance
+		if ( bestFace == -1 )
+			continue;
+
+		// add a candidate point for the contact (transform back into shape A space)
+		VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
+		cp->point = b3TransformPoint( bToA, pt );
+		cp->normal = b3Neg( b3RotateVector( bToA.q, bestNormal ) );
+		cp->separation = bestSeparation;
 	}
 
-	// clip edge voxels against hull edges
-	for ( int i = 0; i < edgeCount; i++ )
-	{
-		// TODO
-	}
+	// TODO clip edge voxels against hull edges
 }
 
 static void collideVoxVox( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
@@ -563,33 +722,6 @@ typedef struct VoxCluster
 	int capacity;
 	int count;
 } VoxCluster;
-
-static void initClusters( VoxCluster* clusters, b3LocalManifoldPoint* clusterPoints )
-{
-	// Initialize the cluster normals to the 6 axis-aligned directions
-	// (Must match the clusterIndex function)
-	clusters[0].normal.x = -1.0f;
-	clusters[1].normal.x = 1.0f;
-	clusters[2].normal.y = -1.0f;
-	clusters[3].normal.y = 1.0f;
-	clusters[4].normal.z = -1.0f;
-	clusters[5].normal.z = 1.0f;
-
-	for ( int i = 0; i < 6; i++ )
-	{
-		VoxCluster* cluster = clusters + i;
-		cluster->points = clusterPoints;
-		clusterPoints += cluster->capacity;
-	}
-}
-
-static int clusterIndex( b3Vec3 normal )
-{
-	int x = (int)( normal.x > 0 );
-	int y = (int)( normal.y > 0 ) + 2;
-	int z = (int)( normal.z > 0 ) + 4;
-	return ( ( normal.x != 0 ) ? x : 0 ) + ( ( normal.y != 0 ) ? y : 0 ) + ( ( normal.z != 0 ) ? z : 0 );
-}
 
 bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contact, const b3Shape* shapeA, b3WorldTransform xfA,
 							  const b3Shape* shapeB, b3WorldTransform xfB, b3Arena arena )
@@ -607,25 +739,30 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	context.pointBuffer = b3Bump( &arena, POINT_BUFFER_CAPACITY * sizeof( VoxCandidatePoint ) );
 
 	b3Transform transformBtoA = b3InvMulWorldTransforms( xfA, xfB );
+	int maxClusters;
 
 	if ( shapeB->type == b3_sphereShape )
 	{
+		maxClusters = 6;
 		context.sphereB = &shapeB->sphere;
 		collideVoxSphereW( &context, transformBtoA, arena );
 	}
 	else if ( shapeB->type == b3_capsuleShape )
 	{
+		maxClusters = 6;
 		context.capsuleB = &shapeB->capsule;
 		collideVoxCapsule( &context, transformBtoA, arena );
 	}
 	else if ( shapeB->type == b3_hullShape )
 	{
+		maxClusters = 6 + shapeB->hull->faceCount;
 		context.hullB = shapeB->hull;
 		collideVoxHull( &context, transformBtoA, arena );
 	}
 	else
 	{
 		B3_ASSERT( shapeB->type == b3_voxelShape );
+		maxClusters = 12;
 		context.voxelsB = shapeB->voxels;
 		collideVoxVox( &context, transformBtoA, arena );
 	}
@@ -645,22 +782,44 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	float collideMs = b3GetMilliseconds( ticks );
 
 	// Cluster the manifold points by normal direction.
-	// Because the voxel normals are axis-aligned, we only have 6 possible normal directions.
-	// This allows for several assumptions that make this faster than the mesh clustering logic.
-	VoxCluster clusters[6] = { 0 };
+	const float clusterThreshold = 0.996f;
+	VoxCluster* clusters = b3Bump( &arena, maxClusters * sizeof( VoxCluster ) );
 	int* clusterMemberships = b3Bump( &arena, context.pointCount * sizeof( int ) );
+	int clusterCount = 0;
 	for ( int i = 0; i < context.pointCount; i++ )
 	{
+		clusterMemberships[i] = B3_NULL_INDEX;
 		VoxCandidatePoint* cp = context.pointBuffer + i;
-		int clusterIdx = clusterIndex( cp->normal );
-		VoxCluster* cluster = clusters + clusterIdx;
-		clusterMemberships[i] = clusterIdx;
-		cluster->capacity++;
+		for ( int j = 0; j < clusterCount; j++ )
+		{
+			VoxCluster* cluster = clusters + j;
+			if ( b3Dot( cp->normal, cluster->normal ) > clusterThreshold )
+			{
+				clusterMemberships[i] = j;
+				cluster->capacity++;
+				break;
+			}
+		}
+
+		if ( clusterMemberships[i] != B3_NULL_INDEX )
+			continue;
+
+		VoxCluster* cluster = clusters + clusterCount;
+		cluster->normal = cp->normal;
+		clusterMemberships[i] = clusterCount;
+		cluster->capacity = 1;
+		cluster->count = 0;
+		clusterCount++;
 	}
 
 	// Initialize the clusters
 	b3LocalManifoldPoint* clusterPoints = b3Bump( &arena, context.pointCount * sizeof( b3LocalManifoldPoint ) );
-	initClusters( clusters, clusterPoints );
+	for ( int i = 0; i < clusterCount; i++ )
+	{
+		VoxCluster* cluster = clusters + i;
+		cluster->points = clusterPoints;
+		clusterPoints += cluster->capacity;
+	}
 
 	// Clone candidate points into the clusters
 	for ( int i = 0; i < context.pointCount; i++ )
@@ -674,15 +833,11 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	}
 
 	// Reduce clusters
-	int clusterCount = 0;
-	for ( int i = 0; i < 6; i++ )
+	for ( int i = 0; i < clusterCount; i++ )
 	{
 		VoxCluster* cluster = clusters + i;
-		if ( cluster->count == 0 )
-			continue;
 
 		cluster->count = b3ReduceCluster( cluster->points, cluster->count, cluster->normal, arena );
-		clusterCount++;
 
 		// filter out any duplicate points in the cluster. Collisions that land on a voxel border
 		// can be reported by both neighbors, so we need to remove duplicates to avoid jittering.
@@ -734,16 +889,13 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	b3Matrix3 matrixA = b3MakeMatrixFromQuat( xfA.q );
 
 	const float normalMatchTolerance = 0.995f;
-	for ( int i = 0, m = 0; i < 6; i++ )
+	for ( int i = 0; i < clusterCount; i++ )
 	{
-		if ( clusters[i].count == 0 )
-			continue;
-
 		VoxCluster* cluster = clusters + i;
 		int pointCount = cluster->count;
 		B3_ASSERT( 0 < pointCount && pointCount <= B3_MAX_MANIFOLD_POINTS );
 
-		b3Manifold* manifold = contact->manifolds + m++;
+		b3Manifold* manifold = contact->manifolds + i;
 		manifold->pointCount = pointCount;
 		manifold->normal = b3MulMV( matrixA, cluster->normal );
 
@@ -855,8 +1007,8 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 				b3SurfaceMaterial material = materialsA[materialIndex];
 				friction += world->frictionCallback( material.friction, material.userMaterialId, materialB->friction,
 													 materialB->userMaterialId );
-				restitution += world->restitutionCallback( material.restitution, material.userMaterialId, materialB->restitution,
-														   materialB->userMaterialId );
+				restitution += world->restitutionCallback( material.restitution, material.userMaterialId,
+	materialB->restitution, materialB->userMaterialId );
 
 				tangentVelocityA = b3Add( tangentVelocityA, material.tangentVelocity );
 
