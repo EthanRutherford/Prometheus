@@ -120,7 +120,8 @@ static void cacheRefreshCallback( uint64_t code, uint32_t index, void* context )
 	if ( ( voxelFlags & b3_voxOccludedMask ) == b3_voxOccludedMask )
 		return;
 
-	b3VoxelCache* cache = b3Array_Emplace( ctx->contact->voxelCache );
+	b3VoxelCache* cache = ctx->contact->voxelCache.data + ctx->contact->voxelCache.count;
+	ctx->contact->voxelCache.count++;
 
 	cache->min.x = (float)b3DecodeVoxelX( code );
 	cache->min.y = (float)b3DecodeVoxelY( code );
@@ -134,9 +135,14 @@ static void refreshVoxCache( b3VoxelContact* contact, const b3VoxelData* voxels,
 	if ( b3AABB_Contains( contact->queryBounds, bounds ) )
 		return;
 
-	// clear the cache and gather new voxels
+	// compute maximum possible voxels returned.
+	int maxVoxels = (int)( ( bounds.upperBound.x - bounds.lowerBound.x ) * ( bounds.upperBound.y - bounds.lowerBound.y ) *
+						   ( bounds.upperBound.z - bounds.lowerBound.z ) );
+
+	// clear the cache, reserve space, and gather new voxels
 	contact->queryBounds = bounds;
 	contact->voxelCache.count = 0;
+	b3Array_Reserve( contact->voxelCache, maxVoxels );
 
 	CacheRefreshContext ctx = { .voxels = voxels, .contact = contact };
 	b3QueryVoxels( voxels, bounds, cacheRefreshCallback, &ctx );
