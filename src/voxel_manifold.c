@@ -65,6 +65,16 @@ typedef struct VoxCollideContext
 	};
 } VoxCollideContext;
 
+static b3Vec3 transformPointMat( b3Matrix3 mat, b3Vec3 t, b3Vec3 p )
+{
+	return b3Add( b3MulMV( mat, p ), t );
+}
+
+static b3Vec3 invTransfromPointMat( b3Matrix3 invMat, b3Vec3 t, b3Vec3 p )
+{
+	return b3MulMV( invMat, b3Sub( p, t ) );
+}
+
 // builds a mask that can be used to detect if a voxel has a neighbor that is closer to the candidate point than itself.
 // This is used to cull contact points early, knowing that there is at least one coplanar voxel that can generate a deeper
 // contact point. This early culling helps reduce load on the later clustering algorithm, which can cull additional points.
@@ -442,10 +452,13 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 
 static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
 {
+	b3Matrix3 bToAMat = b3MakeMatrixFromQuat( bToA.q );
+	b3Matrix3 AToBMat = b3Transpose( bToAMat );
+
 	const b3Voxels voxelsA = context->voxelsA;
 	float invScale = 1.0f / voxelsA.scale;
 	float specDist = B3_SPECULATIVE_DISTANCE * invScale;
-	b3Vec3 hullCenter = b3MulSV( invScale, b3TransformPoint( bToA, context->hullB->center ) );
+	b3Vec3 hullCenter = b3MulSV( invScale, transformPointMat( bToAMat, bToA.p, context->hullB->center ) );
 
 	// compute the query bounds for the voxel grid. This is the AABB of the hull expanded by the speculative distance.
 	b3AABB hullAABB = b3ComputeHullAABB( context->hullB, bToA );
@@ -476,7 +489,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 		const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
 		for ( int i = 0; i < context->hullB->vertexCount; i++ )
 		{
-			b3Vec3 pt = b3MulSV( invScale, b3TransformPoint( bToA, hullPoints[i] ) );
+			b3Vec3 pt = b3MulSV( invScale, transformPointMat( bToAMat, bToA.p, hullPoints[i] ) );
 			if ( b3AABB_Contains( voxelsBounds, (b3AABB){ pt, pt } ) )
 			{
 				hullCorners[hullCornerCount++] = pt;
@@ -485,7 +498,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	}
 
 	{ // gather voxel corners in hull space
-#define VOXINHULL( v ) b3InvTransformPoint( bToA, b3MulSV( voxelsA.scale, v ) )
+#define VOXINHULL( v ) invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, v ) )
 		for ( int i = 0; i < context->contact->voxelCache.count; i++ )
 		{
 			if ( ( context->contact->voxelCache.data[i].flags & b3_isCornerVoxel ) == 0 )
@@ -702,8 +715,8 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 
 		// add a candidate point for the contact (transform back into shape A space)
 		VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
-		cp->point = b3TransformPoint( bToA, pt );
-		cp->normal = b3Neg( b3RotateVector( bToA.q, bestNormal ) );
+		cp->point = transformPointMat( bToAMat, bToA.p, pt );
+		cp->normal = b3Neg( b3MulMV( bToAMat, bestNormal ) );
 		cp->separation = bestSeparation;
 	}
 
