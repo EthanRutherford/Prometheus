@@ -18,6 +18,7 @@
 
 // predefine some SIMD constants.
 static const b3FloatW zeroW = B3_STATIC_FLOAT_W( 0.0f );
+static const b3FloatW halfW = B3_STATIC_FLOAT_W( 0.5f );
 static const b3FloatW oneW = B3_STATIC_FLOAT_W( 1.0f );
 static const b3FloatW epsilonW = B3_STATIC_FLOAT_W( 1000.0f * FLT_MIN );
 static const b3Vec3W zeroVW = { B3_STATIC_FLOAT_W( 0.0f ), B3_STATIC_FLOAT_W( 0.0f ), B3_STATIC_FLOAT_W( 0.0f ) };
@@ -268,21 +269,15 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 		if ( !b3AnyTrueW( vox->accepted ) )
 			continue;
 
-		// compute the voxel normal, which is always axis-aligned. The normal points
-		// towards the sphere center, so the axis with the largest component is the normal axis.
-		b3Vec3W absD = b3AbsVW( d );
-		b3Vec3W xgty = b3Vec3WOf( b3GreaterThanW( absD.X, absD.Y ) );
-		b3Vec3W xgtz = b3Vec3WOf( b3GreaterThanW( absD.X, absD.Z ) );
-		b3Vec3W ygtz = b3Vec3WOf( b3GreaterThanW( absD.Y, absD.Z ) );
-		static const b3Vec3W xAxis = { B3_STATIC_MASK_W( 0xFFFFFFFF ), B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0 ) };
-		static const b3Vec3W yAxis = { B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0xFFFFFFFF ), B3_STATIC_MASK_W( 0 ) };
-		static const b3Vec3W zAxis = { B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0 ), B3_STATIC_MASK_W( 0xFFFFFFFF ) };
-		b3Vec3W axisMask = b3SelectVW( xgty, b3SelectVW( xgtz, xAxis, zAxis ), b3SelectVW( ygtz, yAxis, zAxis ) );
-		vox->normal = b3SelectVW( axisMask, b3SignVW( d ), zeroVW );
+		// compute normal and closest point on sphere.
+		// contact point is midpoint between closest points
+		b3FloatW dist = b3SqrtW( dist2 );
+		vox->normal = b3MulSVW( b3DivW( oneW, dist ), d );
+		b3Vec3W closestPointSphere = b3SubVW( centerW, b3MulSVW( radiusW, vox->normal ) );
 
 		// descale the point and compute separation
-		vox->point = b3MulSVW( scale, closestPoint );
-		vox->separation = b3MulW( scale, b3SubW( b3SqrtW( dist2 ), radiusW ) );
+		vox->point = b3MulSVW( scale, b3MulSVW( halfW, b3AddVW( closestPoint, closestPointSphere ) ) );
+		vox->separation = b3MulW( scale, b3SubW( dist, radiusW ) );
 	}
 
 	// Step 4: add a candidate point for all valid lanes
@@ -440,16 +435,16 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 			if ( ( flags & neighborMask ) != 0 )
 				continue;
 
-			// compute the voxel normal, which is always axis-aligned. The normal points
-			// towards the capsule segment closest point, so the axis with the largest component is the normal axis.
-			b3Vec3 absD = b3Abs( bestD[j] );
-			b3Vec3i axisMask = absD.x > absD.y ? ( absD.x > absD.z ? (b3Vec3i){ 1, 0, 0 } : (b3Vec3i){ 0, 0, 1 } )
-											   : ( absD.y > absD.z ? (b3Vec3i){ 0, 1, 0 } : (b3Vec3i){ 0, 0, 1 } );
-			b3Vec3 normal = b3Select( axisMask, b3Sign( bestD[j] ), b3Vec3_zero );
+			// compute normal and closest point on capsule.
+			// contact point is midpoint between closest points
+			float dist = sqrtf( bestDist2[j] );
+			b3Vec3 normal = b3MulSV( 1.0f / dist, bestD[j] );
+			b3Vec3 pVox = b3Sub( bestPVox[j], b3MulSV( radius, normal ) );
+			b3Vec3 point = b3MulSV( 0.5f, b3Add( bestPCaps[j], pVox ) );
 
 			// add a candidate point for the contact
 			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
-			cp->point = b3MulSV( voxelsA.scale, bestPVox[j] );
+			cp->point = b3MulSV( voxelsA.scale, point );
 			cp->normal = normal;
 			cp->separation = ( sqrtf( bestDist2[j] ) - radius ) * voxelsA.scale;
 		}
@@ -758,30 +753,25 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	context.pointBuffer = b3Bump( &arena, POINT_BUFFER_CAPACITY * sizeof( VoxCandidatePoint ) );
 
 	b3Transform transformBtoA = b3InvMulWorldTransforms( xfA, xfB );
-	int maxClusters;
 
 	if ( shapeB->type == b3_sphereShape )
 	{
-		maxClusters = 6;
 		context.sphereB = &shapeB->sphere;
 		collideVoxSphereW( &context, transformBtoA, arena );
 	}
 	else if ( shapeB->type == b3_capsuleShape )
 	{
-		maxClusters = 6;
 		context.capsuleB = &shapeB->capsule;
 		collideVoxCapsule( &context, transformBtoA, arena );
 	}
 	else if ( shapeB->type == b3_hullShape )
 	{
-		maxClusters = 6 + shapeB->hull->faceCount;
 		context.hullB = shapeB->hull;
 		collideVoxHull( &context, transformBtoA, arena );
 	}
 	else
 	{
 		B3_ASSERT( shapeB->type == b3_voxelShape );
-		maxClusters = 12;
 		context.voxelsB = shapeB->voxels;
 		collideVoxVox( &context, transformBtoA, arena );
 	}
@@ -802,7 +792,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 
 	// Cluster the manifold points by normal direction.
 	const float clusterThreshold = 0.996f;
-	VoxCluster* clusters = b3Bump( &arena, maxClusters * sizeof( VoxCluster ) );
+	VoxCluster* clusters = b3Bump( &arena, context.pointCount * sizeof( VoxCluster ) );
 	int* clusterMemberships = b3Bump( &arena, context.pointCount * sizeof( int ) );
 	int clusterCount = 0;
 	for ( int i = 0; i < context.pointCount; i++ )
@@ -833,11 +823,11 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 
 	// Initialize the clusters
 	b3LocalManifoldPoint* clusterPoints = b3Bump( &arena, context.pointCount * sizeof( b3LocalManifoldPoint ) );
-	for ( int i = 0; i < clusterCount; i++ )
+	for ( int i = 0, j = 0; i < clusterCount; i++ )
 	{
 		VoxCluster* cluster = clusters + i;
-		cluster->points = clusterPoints;
-		clusterPoints += cluster->capacity;
+		cluster->points = clusterPoints + j;
+		j += cluster->capacity;
 	}
 
 	// Clone candidate points into the clusters
