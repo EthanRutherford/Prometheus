@@ -111,6 +111,498 @@ static b3AABB computeVoxelBounds( const b3VoxelData* voxels, b3Vec3 lower, b3Vec
 	return (b3AABB){ lowerBound, upperBound };
 }
 
+// process an edge or corner voxel to extract corners and edges
+static void processVoxel( b3Vec3 voxMin, uint32_t flags, b3Vec3* corners, int* cornerCount, b3Vec3* edgePt0, b3Vec3* edgePt1,
+						  b3Vec3* edgeNorm0, b3Vec3* edgeNorm1, int* edgeCount )
+{
+#define VOX_CORNER( X, Y, Z ) corners[( *cornerCount )++] = ( (b3Vec3){ voxMin.x + ( X ), voxMin.y + ( Y ), voxMin.z + ( Z ) } );
+#define VOX_EDGE( X0, Y0, Z0, X1, Y1, Z1, NX0, NY0, NZ0, NX1, NY1, NZ1 )                                                         \
+	edgePt0[( *edgeCount )] = ( (b3Vec3){ voxMin.x + ( X0 ), voxMin.y + ( Y0 ), voxMin.z + ( Z0 ) } );                           \
+	edgePt1[( *edgeCount )] = ( (b3Vec3){ voxMin.x + ( X1 ), voxMin.y + ( Y1 ), voxMin.z + ( Z1 ) } );                           \
+	edgeNorm0[( *edgeCount )] = ( (b3Vec3){ NX0, NY0, NZ0 } );                                                                   \
+	edgeNorm1[( *edgeCount )] = ( (b3Vec3){ NX1, NY1, NZ1 } );                                                                   \
+	( *edgeCount )++;
+
+	/* clang-format off
+		This function's switch statement body was generated using the following javascript code:
+		function generate(posX, negX, posY, negY, posZ, negZ) {
+			// case label
+			const parts = [
+				posX ? "b3_posXNeighbor" : "",
+				negX ? "b3_negXNeighbor" : "",
+				posY ? "b3_posYNeighbor" : "",
+				negY ? "b3_negYNeighbor" : "",
+				posZ ? "b3_posZNeighbor" : "",
+				negZ ? "b3_negZNeighbor" : "",
+			].filter(x => x);
+
+			const label = `case ${parts.length ? parts.join(" | ") : "b3_noNeighbors"}:\n`;
+
+			let body = "";
+
+			// corners
+			const LUTX = [negX, posX];
+			const LUTY = [negY, posY];
+			const LUTZ = [negZ, posZ];
+			for (let x = 0; x <= 1; x++) {
+				for (let y = 0; y <= 1; y++) {
+					for (let z = 0; z <= 1; z++) {
+						if (!LUTX[x] && !LUTY[y] && !LUTZ[z])
+							body += `\tVOX_CORNER( ${x}, ${y}, ${z} )\n`;
+					}
+				}
+			}
+
+			// edges
+			const LUTLUT = [[LUTY, LUTZ], [LUTX, LUTZ], [LUTX, LUTY]];
+			for (let axis = 0; axis <= 2; axis++) {
+				for (let v0 = 0; v0 <= 1; v0++) {
+					for (let v1 = 0; v1 <= 1; v1++) {
+						if (!LUTLUT[axis][0][v0] && !LUTLUT[axis][1][v1]) {
+							let coord0 = [v0, v1];
+							let coord1 = [v0, v1];
+                            let norm0 = [v0 * 2 - 1, 0];
+                            let norm1 = [0, v1 * 2 - 1];
+							coord0.splice(axis, 0, 0);
+							coord1.splice(axis, 0, 1);
+                            norm0.splice(axis, 0, 0);
+                            norm1.splice(axis, 0, 0);
+                            
+							body += "\tVOX_EDGE( " +
+                                `${coord0[0]}, ` +
+                                `${coord0[1]}, ` +
+                                `${coord0[2]}, ` +
+                                `${coord1[0]}, ` +
+                                `${coord1[1]}, ` +
+                                `${coord1[2]}, ` +
+                                `${norm0[0]}, ` +
+                                `${norm0[1]}, ` +
+                                `${norm0[2]}, ` +
+                                `${norm1[0]}, ` +
+                                `${norm1[1]}, ` +
+                                `${norm1[2]} )\n`;
+						}
+					}
+				}
+			}
+
+			if (!body)
+				return "";
+
+			return label + body + "\tbreak;\n";
+		}
+
+		function genAll() {
+			let str = "";
+			for (let posX = 0; posX <= 1; posX++) {
+				for (let negX = 0; negX <= 1; negX++) {
+					for (let posY = 0; posY <= 1; posY++) {
+						for (let negY = 0; negY <= 1; negY++) {
+							for (let posZ = 0; posZ <= 1; posZ++) {
+								for (let negZ = 0; negZ <= 1; negZ++) {
+									str += generate(posX, negX, posY, negY, posZ, negZ);
+								}
+							}
+						}
+					}
+				}
+			}
+
+			return str;
+		}
+	clang-format on */
+
+	uint32_t voxelType = flags & b3_voxTypeMask;
+	B3_ASSERT( voxelType == b3_isEdgeVoxel || voxelType == b3_isCornerVoxel );
+	// corner voxels will usually only have one corner vertex, but may have
+	// 2, 4, or 8 depending on the configuration of neighboring voxels.
+	// A corner with 0 neighbors is a free floating cube, so all 8 corners are valid.
+	// A corner voxel with 1 neighbor invalidates all corners on that face, leaving 4 valid corners.
+	// A corner voxel with 2 neighbors forms an L shape, leaving 2 valid corners.
+	// A corner voxel with 3 neighbors forms a proper corner, leaving only the single corner vertex.
+
+	// edge voxels will usually have one edge, but could also have two or four depending on the configuration of
+	// neighboring voxels. An edge always has at least 1 pair of opposing neighbors, and up to two remaining
+	// neighbors. (3 remaining would mean a surface voxel, and all four would mean fully occluded)
+
+	uint32_t neighborFlags = flags & b3_voxNeighborsMask;
+	switch ( neighborFlags )
+	{
+		case b3_noNeighbors:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 0, 0, 1 )
+			VOX_CORNER( 0, 1, 0 )
+			VOX_CORNER( 0, 1, 1 )
+			VOX_CORNER( 1, 0, 0 )
+			VOX_CORNER( 1, 0, 1 )
+			VOX_CORNER( 1, 1, 0 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negZNeighbor:
+			VOX_CORNER( 0, 0, 1 )
+			VOX_CORNER( 0, 1, 1 )
+			VOX_CORNER( 1, 0, 1 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posZNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 0, 1, 0 )
+			VOX_CORNER( 1, 0, 0 )
+			VOX_CORNER( 1, 1, 0 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negYNeighbor:
+			VOX_CORNER( 0, 1, 0 )
+			VOX_CORNER( 0, 1, 1 )
+			VOX_CORNER( 1, 1, 0 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negYNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 0, 1, 1 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negYNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 0, 1, 0 )
+			VOX_CORNER( 1, 1, 0 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posYNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 0, 0, 1 )
+			VOX_CORNER( 1, 0, 0 )
+			VOX_CORNER( 1, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posYNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 0, 0, 1 )
+			VOX_CORNER( 1, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posYNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 1, 0, 0 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posYNeighbor | b3_negYNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			break;
+		case b3_posYNeighbor | b3_negYNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			break;
+		case b3_posYNeighbor | b3_negYNeighbor | b3_posZNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			break;
+		case b3_negXNeighbor:
+			VOX_CORNER( 1, 0, 0 )
+			VOX_CORNER( 1, 0, 1 )
+			VOX_CORNER( 1, 1, 0 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 1, 0, 1 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 1, 0, 0 )
+			VOX_CORNER( 1, 1, 0 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_negYNeighbor:
+			VOX_CORNER( 1, 1, 0 )
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_negYNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 1, 1, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_negYNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 1, 1, 0 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_negYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor:
+			VOX_CORNER( 1, 0, 0 )
+			VOX_CORNER( 1, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 1, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 1, 0, 0 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor | b3_negYNeighbor:
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
+			break;
+		case b3_negXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_posZNeighbor:
+			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
+			break;
+		case b3_posXNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 0, 0, 1 )
+			VOX_CORNER( 0, 1, 0 )
+			VOX_CORNER( 0, 1, 1 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 0, 0, 1 )
+			VOX_CORNER( 0, 1, 1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 0, 1, 0 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_negYNeighbor:
+			VOX_CORNER( 0, 1, 0 )
+			VOX_CORNER( 0, 1, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_negYNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 0, 1, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_negYNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 0, 1, 0 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_negYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_CORNER( 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor | b3_negZNeighbor:
+			VOX_CORNER( 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor | b3_posZNeighbor:
+			VOX_CORNER( 0, 0, 0 )
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor | b3_negYNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_posZNeighbor:
+			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor:
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_posZNeighbor:
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_negYNeighbor:
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_negYNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_negYNeighbor | b3_posZNeighbor:
+			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_posYNeighbor:
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_posYNeighbor | b3_negZNeighbor:
+			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
+			break;
+		case b3_posXNeighbor | b3_negXNeighbor | b3_posYNeighbor | b3_posZNeighbor:
+			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
+			break;
+
+		// a corner voxel should never have more than three neighboring voxels, and an edge voxel will
+		// never have more than four, so any other case should be unreachable
+		default:
+			B3_ASSERT( 0 );
+			break;
+	}
+#undef VOX_EDGE
+#undef VOX_CORNER
+}
+
 static void cacheRefreshCallback( uint64_t code, uint32_t index, void* context )
 {
 	CacheRefreshContext* ctx = (CacheRefreshContext*)context;
@@ -473,21 +965,18 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	if ( context->contact->voxelCache.count == 0 )
 		return;
 
-	// Build relevant contact data. TODO: might be smart to cache this data in the voxel shape, since
-	// we'll need to use it frequently for voxel-hull or voxel-voxel collisions.
-
 	// hull corner vertices, in voxel space.
 	b3Vec3* hullCorners = b3Bump( &arena, context->hullB->vertexCount * sizeof( b3Vec3 ) );
 	int hullCornerCount = 0;
-	// voxel corners, in hull space.
-	b3Vec3* voxelCorners = b3Bump( &arena, context->contact->voxelCache.count * 8 * sizeof( b3Vec3 ) );
-	int voxelCornerCount = 0;
 	// hull planes in hull space.
 	const b3Plane* hullPlanes = b3GetHullPlanes( context->hullB );
+	// hull edges, in hull space.
+	const b3HullHalfEdge* hullEdges = b3GetHullEdges( context->hullB );
+	// hull points, in hull space.
+	const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
 
 	{ // gather hull corners in voxel space
 		b3AABB voxelsBounds = b3AABB_Inflate( voxelsA.data->bounds, specDist );
-		const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
 		for ( int i = 0; i < context->hullB->vertexCount; i++ )
 		{
 			b3Vec3 pt = b3MulSV( invScale, transformPointMat( bToAMat, bToA.p, hullPoints[i] ) );
@@ -496,142 +985,6 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 				hullCorners[hullCornerCount++] = pt;
 			}
 		}
-	}
-
-	{ // gather voxel corners in hull space
-#define VOXINHULL( v ) invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, v ) )
-		for ( int i = 0; i < context->contact->voxelCache.count; i++ )
-		{
-			if ( ( context->contact->voxelCache.data[i].flags & b3_isCornerVoxel ) == 0 )
-				continue;
-
-			// corner voxels will usually only have one corner vertex, but may have
-			// 2, 4, or 8 depending on the configuration of neighboring voxels.
-			// A corner with 0 neighbors is a free floating cube, so all 8 corners are valid.
-			// A corner voxel with 1 neighbor invalidates all corners on that face, leaving 4 valid corners.
-			// A corner voxel with 2 neighbors forms an L shape, leaving 2 valid corners.
-			// A corner voxel with 3 neighbors forms a proper corner, leaving only the single corner vertex.
-			b3Vec3 voxMin = context->contact->voxelCache.data[i].min;
-			uint32_t neighborFlags = context->contact->voxelCache.data[i].flags & b3_voxNeighborsMask;
-			int popcount = popcount_32( neighborFlags );
-			switch ( popcount )
-			{
-				// all eight corners
-				case 0:
-					voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-					voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
-					break;
-				// four corners (enumerate all possible configurations, as there's no clever tricks I can think of atm)
-				case 1:
-					switch ( neighborFlags )
-					{
-						case b3_posXNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							break;
-						case b3_negXNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
-							break;
-						case b3_posYNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-							break;
-						case b3_negYNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
-							break;
-						case b3_posZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
-							break;
-						case b3_negZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
-							break;
-					}
-					break;
-				// two corners (enumerate all possible configurations, as there's no clever tricks I can think of atm)
-				case 2:
-					switch ( neighborFlags )
-					{
-						case b3_posXNeighbor | b3_posYNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-							break;
-						case b3_posXNeighbor | b3_negYNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							break;
-						case b3_posXNeighbor | b3_posZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-							break;
-						case b3_posXNeighbor | b3_negZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 0, 0 } ) );
-							break;
-						case b3_negXNeighbor | b3_posYNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-							break;
-						case b3_negXNeighbor | b3_negYNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 1, 1 } ) );
-							break;
-						case b3_negXNeighbor | b3_posZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-							break;
-						case b3_negXNeighbor | b3_negZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 1 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 1, 0, 0 } ) );
-							break;
-						case b3_posYNeighbor | b3_posZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( voxMin );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							break;
-						case b3_posYNeighbor | b3_negZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							break;
-						case b3_negYNeighbor | b3_posZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							break;
-						case b3_negYNeighbor | b3_negZNeighbor:
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 0 } ) );
-							voxelCorners[voxelCornerCount++] = VOXINHULL( b3Add( voxMin, (b3Vec3){ 0, 1, 1 } ) );
-							break;
-					}
-					break;
-				// one corner
-				case 3:
-					voxelCorners[voxelCornerCount++] = VOXINHULL(
-						b3Add( voxMin, (b3Vec3){ (float)( ( neighborFlags >> 3 ) & 1 ), (float)( ( neighborFlags >> 4 ) & 1 ),
-												 (float)( ( neighborFlags >> 5 ) & 1 ) } ) );
-					break;
-			}
-		}
-#undef VOXINHULL
 	}
 
 	// test hull vertices against voxels
@@ -684,44 +1037,87 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 		}
 	}
 
-	// clip corner voxels against the hull, and add any that are inside as candidate points
-	for ( int i = 0; i < voxelCornerCount; i++ )
+	// test corner and edge voxels against the hull
+	for ( int v = 0; v < context->contact->voxelCache.count; v++ )
 	{
-		b3Vec3 pt = voxelCorners[i];
-
-		float bestSeparation = -FLT_MAX;
-		b3Vec3 bestNormal = { 0 };
-		int bestFace = -1;
-		for ( int j = 0; j < context->hullB->faceCount; j++ )
-		{
-			b3Plane plane = hullPlanes[j];
-			float sep = b3PlaneSeparation( plane, pt );
-			if ( sep > B3_SPECULATIVE_DISTANCE )
-			{
-				bestFace = -1;
-				break;
-			}
-
-			if ( sep > bestSeparation )
-			{
-				bestSeparation = sep;
-				bestNormal = plane.normal;
-				bestFace = j;
-			}
-		}
-
-		// found a separating axis, so this voxel corner is outside the hull + speculative distance
-		if ( bestFace == -1 )
+		// skip face voxels (internal voxels were filtered out before entering the cache)
+		b3VoxelCache* entry = context->contact->voxelCache.data + v;
+		if ( ( entry->flags & b3_voxTypeMask ) == b3_isFaceVoxel )
 			continue;
 
-		// add a candidate point for the contact (transform back into shape A space)
-		VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
-		cp->point = transformPointMat( bToAMat, bToA.p, pt );
-		cp->normal = b3Neg( b3MulMV( bToAMat, bestNormal ) );
-		cp->separation = bestSeparation;
-	}
+		// gather the corners and edges of the voxel
+		b3Vec3 corners[8];
+		b3Vec3 edges0[12];
+		b3Vec3 edges1[12];
+		b3Vec3 norms0[12];
+		b3Vec3 norms1[12];
+		int cornerCount = 0;
+		int edgeCount = 0;
+		processVoxel( entry->min, entry->flags, corners, &cornerCount, edges0, edges1, norms0, norms1, &edgeCount );
 
-	// TODO clip edge voxels against hull edges
+		// clip voxel corners against the hull, and add any that are inside as candidate points
+		for ( int i = 0; i < cornerCount; i++ )
+		{
+			b3Vec3 pt = invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, corners[i] ) );
+
+			float bestSeparation = -FLT_MAX;
+			b3Vec3 bestNormal = { 0 };
+			int bestFace = -1;
+			for ( int j = 0; j < context->hullB->faceCount; j++ )
+			{
+				b3Plane plane = hullPlanes[j];
+				float sep = b3PlaneSeparation( plane, pt );
+				if ( sep > B3_SPECULATIVE_DISTANCE )
+				{
+					bestFace = -1;
+					break;
+				}
+
+				if ( sep > bestSeparation )
+				{
+					bestSeparation = sep;
+					bestNormal = plane.normal;
+					bestFace = j;
+				}
+			}
+
+			// either no point was found or we found a separating axis
+			if ( bestFace == -1 )
+				continue;
+
+			// add a candidate point for the contact (transform back into shape A space)
+			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
+			cp->point = transformPointMat( bToAMat, bToA.p, pt );
+			cp->normal = b3Neg( b3MulMV( bToAMat, bestNormal ) );
+			cp->separation = bestSeparation;
+		}
+
+		// clip voxel edges against hull edges, and add any that are inside as candidate points
+		float squaredTolerance = 0.005f * 0.005f;
+		for ( int i = 0; i < edgeCount; i++ )
+		{
+			b3Vec3 vp0 = invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, edges0[i] ) );
+			b3Vec3 vp1 = invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, edges1[i] ) );
+			b3Vec3 vn0 = b3MulMV( AToBMat, norms0[i] );
+			b3Vec3 vn1 = b3MulMV( AToBMat, norms1[i] );
+			b3Vec3 ve = b3Sub( vp1, vp0 );
+
+			for ( int j = 0; j < context->hullB->edgeCount; j += 2 )
+			{
+				const b3HullHalfEdge* edge = hullEdges + j;
+				const b3HullHalfEdge* twin = hullEdges + j + 1;
+				B3_ASSERT( edge->twin == j + 1 && twin->twin == j );
+
+				b3Vec3 hp0 = hullPoints[edge->origin];
+				b3Vec3 he = b3Sub( hullPoints[twin->origin], hp0 );
+
+				b3Vec3 hn0 = hullPlanes[edge->face].normal;
+				b3Vec3 hn1 = hullPlanes[twin->face].normal;
+
+				// TODO
+			}
+		}
+	}
 }
 
 static void collideVoxVox( VoxCollideContext* context, b3Transform bToA, b3Arena arena )

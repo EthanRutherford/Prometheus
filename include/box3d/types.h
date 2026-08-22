@@ -2619,6 +2619,7 @@ typedef struct b3VoxelNode
 /// Voxel classification flags.
 enum b3VoxelFlags
 {
+	b3_noNeighbors = 0x00,	 ///< The voxel has no neighbors.
 	b3_posXNeighbor = 0x01,	 ///< The voxel has a neighbor in the positive x direction.
 	b3_posYNeighbor = 0x02,	 ///< The voxel has a neighbor in the positive y direction.
 	b3_posZNeighbor = 0x04,	 ///< The voxel has a neighbor in the positive z direction.
