@@ -487,9 +487,19 @@ static inline b3FloatW b3GreaterThanW( b3FloatW a, b3FloatW b )
 	return vreinterpretq_f32_u32( vcgtq_f32( a, b ) );
 }
 
+static inline b3FloatW b3GreaterOrEqualW( b3FloatW a, b3FloatW b )
+{
+	return vreinterpretq_f32_u32( vcgeq_f32( a, b ) );
+}
+
 static inline b3FloatW b3LessThanW( b3FloatW a, b3FloatW b )
 {
 	return vreinterpretq_f32_u32( vcltq_f32( a, b ) );
+}
+
+static inline b3FloatW b3LessOrEqualW( b3FloatW a, b3FloatW b )
+{
+	return vreinterpretq_f32_u32( vcleq_f32( a, b ) );
 }
 
 static inline b3FloatW b3EqualsW( b3FloatW a, b3FloatW b )
@@ -674,9 +684,19 @@ static inline b3FloatW b3GreaterThanW( b3FloatW a, b3FloatW b )
 	return _mm_cmpgt_ps( a, b );
 }
 
+static inline b3FloatW b3GreaterOrEqualW( b3FloatW a, b3FloatW b )
+{
+	return _mm_cmpge_ps( a, b );
+}
+
 static inline b3FloatW b3LessThanW( b3FloatW a, b3FloatW b )
 {
 	return _mm_cmplt_ps( a, b );
+}
+
+static inline b3FloatW b3LessOrEqualW( b3FloatW a, b3FloatW b )
+{
+	return _mm_cmple_ps( a, b );
 }
 
 static inline b3FloatW b3EqualsW( b3FloatW a, b3FloatW b )
@@ -868,6 +888,16 @@ static inline b3FloatW b3GreaterThanW( b3FloatW a, b3FloatW b )
 	return r;
 }
 
+static inline b3FloatW b3GreaterOrEqualW( b3FloatW a, b3FloatW b )
+{
+	b3FloatW r;
+	r.x = a.x >= b.x ? 1.0f : 0.0f;
+	r.y = a.y >= b.y ? 1.0f : 0.0f;
+	r.z = a.z >= b.z ? 1.0f : 0.0f;
+	r.w = a.w >= b.w ? 1.0f : 0.0f;
+	return r;
+}
+
 static inline b3FloatW b3LessThanW( b3FloatW a, b3FloatW b )
 {
 	b3FloatW r;
@@ -875,6 +905,16 @@ static inline b3FloatW b3LessThanW( b3FloatW a, b3FloatW b )
 	r.y = a.y < b.y ? 1.0f : 0.0f;
 	r.z = a.z < b.z ? 1.0f : 0.0f;
 	r.w = a.w < b.w ? 1.0f : 0.0f;
+	return r;
+}
+
+static inline b3FloatW b3LessOrEqualW( b3FloatW a, b3FloatW b )
+{
+	b3FloatW r;
+	r.x = a.x <= b.x ? 1.0f : 0.0f;
+	r.y = a.y <= b.y ? 1.0f : 0.0f;
+	r.z = a.z <= b.z ? 1.0f : 0.0f;
+	r.w = a.w <= b.w ? 1.0f : 0.0f;
 	return r;
 }
 

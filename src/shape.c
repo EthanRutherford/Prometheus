@@ -2516,8 +2516,6 @@ b3TOIOutput b3ShapeTimeOfImpact( b3Shape* shapeA, b3Shape* shapeB, b3Sweep* swee
 
 	if ( typeA == b3_voxelShape )
 	{
-		// assuming voxels(A) is static
-
 		b3VoxelImpactContext context = { 0 };
 		context.toiInput.sweepA = *sweepA;
 		context.toiInput.proxyA.count = 1;

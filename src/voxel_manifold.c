@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Ethan Rutherford
 // SPDX-License-Identifier: MIT
 
+// a note about boundary checks within this file; when checking against voxel boundaries, we treat inside as
+// min <= inside < max. This is so that contacts that land on the boundary between multiple voxels will
+// avoid duplicating the contact point on each voxel; only one voxel will "see" the contact position and add
+// it as a contact point, ensuring that we avoid duplicated contact points.
+
 #include "bits.h"
 #include "contact.h"
 #include "manifold.h"
@@ -23,6 +28,10 @@ static const b3FloatW oneW = B3_STATIC_FLOAT_W( 1.0f );
 static const b3FloatW epsilonW = B3_STATIC_FLOAT_W( 1000.0f * FLT_MIN );
 static const b3Vec3W zeroVW = { B3_STATIC_FLOAT_W( 0.0f ), B3_STATIC_FLOAT_W( 0.0f ), B3_STATIC_FLOAT_W( 0.0f ) };
 static const b3Vec3W oneVW = { B3_STATIC_FLOAT_W( 1.0f ), B3_STATIC_FLOAT_W( 1.0f ), B3_STATIC_FLOAT_W( 1.0f ) };
+
+// helper for extracting floats/ints from SIMD lanes or vector components.
+#define FLT( v, i ) ( ( (float*)&( v ) )[i] )
+#define INT( v, i ) ( ( (int*)&( v ) )[i] )
 
 typedef struct VoxelWide
 {
@@ -71,7 +80,7 @@ static b3Vec3 transformPointMat( b3Matrix3 mat, b3Vec3 t, b3Vec3 p )
 	return b3Add( b3MulMV( mat, p ), t );
 }
 
-static b3Vec3 invTransfromPointMat( b3Matrix3 invMat, b3Vec3 t, b3Vec3 p )
+static b3Vec3 invTransformPointMat( b3Matrix3 invMat, b3Vec3 t, b3Vec3 p )
 {
 	return b3MulMV( invMat, b3Sub( p, t ) );
 }
@@ -94,11 +103,11 @@ static b3FloatW getNeighborMaskW( const b3Vec3W candidate, const b3Vec3W voxMin,
 	// a neighboring voxel, which is not a valid contact point for collision resolution.
 	b3FloatW neighborMask = { 0, 0, 0, 0 };
 	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_negXNeighborW, b3LessThanW( candidate.X, voxMin.X ) ) );
-	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posXNeighborW, b3GreaterThanW( candidate.X, voxMax.X ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posXNeighborW, b3GreaterOrEqualW( candidate.X, voxMax.X ) ) );
 	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_negYNeighborW, b3LessThanW( candidate.Y, voxMin.Y ) ) );
-	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posYNeighborW, b3GreaterThanW( candidate.Y, voxMax.Y ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posYNeighborW, b3GreaterOrEqualW( candidate.Y, voxMax.Y ) ) );
 	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_negZNeighborW, b3LessThanW( candidate.Z, voxMin.Z ) ) );
-	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posZNeighborW, b3GreaterThanW( candidate.Z, voxMax.Z ) ) );
+	neighborMask = b3OrW( neighborMask, b3BlendW( zeroW, b3_posZNeighborW, b3GreaterOrEqualW( candidate.Z, voxMax.Z ) ) );
 	return neighborMask;
 }
 
@@ -673,15 +682,15 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 			int index = i * B3_SIMD_WIDTH + lane;
 			if ( index >= context->contact->voxelCache.count )
 			{
-				( (int*)&vox->flags )[lane] = 0;
+				INT( vox->flags, lane ) = 0;
 				continue;
 			}
 
 			b3VoxelCache* cache = &context->contact->voxelCache.data[index];
-			( (float*)&vox->min.X )[lane] = cache->min.x;
-			( (float*)&vox->min.Y )[lane] = cache->min.y;
-			( (float*)&vox->min.Z )[lane] = cache->min.z;
-			( (int*)&vox->flags )[lane] = cache->flags;
+			FLT( vox->min.X, lane ) = cache->min.x;
+			FLT( vox->min.Y, lane ) = cache->min.y;
+			FLT( vox->min.Z, lane ) = cache->min.z;
+			INT( vox->flags, lane ) = cache->flags;
 		}
 	}
 
@@ -714,21 +723,21 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 	{
 		int wi = i / B3_SIMD_WIDTH;
 		int li = i % B3_SIMD_WIDTH;
-		if ( ( (int*)&wideVoxels[wi].accepted )[li] != 0 )
+		if ( INT( wideVoxels[wi].accepted, li ) != 0 )
 		{
 			if ( i != acceptedCount )
 			{
 				int wj = acceptedCount / B3_SIMD_WIDTH;
 				int lj = acceptedCount % B3_SIMD_WIDTH;
-				( (float*)&wideVoxels[wj].min.X )[lj] = ( (float*)&wideVoxels[wi].min.X )[li];
-				( (float*)&wideVoxels[wj].min.Y )[lj] = ( (float*)&wideVoxels[wi].min.Y )[li];
-				( (float*)&wideVoxels[wj].min.Z )[lj] = ( (float*)&wideVoxels[wi].min.Z )[li];
+				FLT( wideVoxels[wj].min.X, lj ) = FLT( wideVoxels[wi].min.X, li );
+				FLT( wideVoxels[wj].min.Y, lj ) = FLT( wideVoxels[wi].min.Y, li );
+				FLT( wideVoxels[wj].min.Z, lj ) = FLT( wideVoxels[wi].min.Z, li );
 
-				( (float*)&wideVoxels[wj].max.X )[lj] = ( (float*)&wideVoxels[wi].max.X )[li];
-				( (float*)&wideVoxels[wj].max.Y )[lj] = ( (float*)&wideVoxels[wi].max.Y )[li];
-				( (float*)&wideVoxels[wj].max.Z )[lj] = ( (float*)&wideVoxels[wi].max.Z )[li];
+				FLT( wideVoxels[wj].max.X, lj ) = FLT( wideVoxels[wi].max.X, li );
+				FLT( wideVoxels[wj].max.Y, lj ) = FLT( wideVoxels[wi].max.Y, li );
+				FLT( wideVoxels[wj].max.Z, lj ) = FLT( wideVoxels[wi].max.Z, li );
 
-				( (int*)&wideVoxels[wj].flags )[lj] = ( (int*)&wideVoxels[wi].flags )[li];
+				INT( wideVoxels[wj].flags, lj ) = INT( wideVoxels[wi].flags, li );
 			}
 
 			acceptedCount++;
@@ -742,7 +751,7 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 	{
 		for ( int lane = overflowLanes; lane < B3_SIMD_WIDTH; lane++ )
 		{
-			( (int*)&wideVoxels[wideCount - 1].flags )[lane] = 0;
+			INT( wideVoxels[wideCount - 1].flags, lane ) = 0;
 		}
 	}
 
@@ -779,19 +788,19 @@ static void collideVoxSphereW( VoxCollideContext* context, b3Transform bToA, b3A
 
 		for ( int lane = 0; lane < B3_SIMD_WIDTH; lane++ )
 		{
-			if ( ( (int*)&vox->accepted )[lane] == 0 )
+			if ( INT( vox->accepted, lane ) == 0 )
 				continue;
 
 			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
-			cp->point.x = ( (float*)&vox->point.X )[lane];
-			cp->point.y = ( (float*)&vox->point.Y )[lane];
-			cp->point.z = ( (float*)&vox->point.Z )[lane];
+			cp->point.x = FLT( vox->point.X, lane );
+			cp->point.y = FLT( vox->point.Y, lane );
+			cp->point.z = FLT( vox->point.Z, lane );
 
-			cp->normal.x = ( (float*)&vox->normal.X )[lane];
-			cp->normal.y = ( (float*)&vox->normal.Y )[lane];
-			cp->normal.z = ( (float*)&vox->normal.Z )[lane];
+			cp->normal.x = FLT( vox->normal.X, lane );
+			cp->normal.y = FLT( vox->normal.Y, lane );
+			cp->normal.z = FLT( vox->normal.Z, lane );
 
-			cp->separation = ( ( (float*)&vox->separation )[lane] );
+			cp->separation = ( FLT( vox->separation, lane ) );
 		}
 	}
 }
@@ -804,11 +813,11 @@ static uint32_t getNeighborMask( const b3Vec3 candidate, const b3Vec3 voxMin, co
 	// a neighboring voxel, which is not a valid contact point for collision resolution.
 	uint32_t neighborMask = 0;
 	neighborMask |= candidate.x < voxMin.x ? b3_negXNeighbor : 0;
-	neighborMask |= candidate.x > voxMax.x ? b3_posXNeighbor : 0;
+	neighborMask |= candidate.x >= voxMax.x ? b3_posXNeighbor : 0;
 	neighborMask |= candidate.y < voxMin.y ? b3_negYNeighbor : 0;
-	neighborMask |= candidate.y > voxMax.y ? b3_posYNeighbor : 0;
+	neighborMask |= candidate.y >= voxMax.y ? b3_posYNeighbor : 0;
 	neighborMask |= candidate.z < voxMin.z ? b3_negZNeighbor : 0;
-	neighborMask |= candidate.z > voxMax.z ? b3_posZNeighbor : 0;
+	neighborMask |= candidate.z >= voxMax.z ? b3_posZNeighbor : 0;
 	return neighborMask;
 }
 
@@ -848,11 +857,11 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 		// However, this can prevent computing the closest point calculation below.
 		uint32_t neighborMask = 0;
 		neighborMask |= max( center1.x, center2.x ) < voxMin.x ? b3_negXNeighbor : 0;
-		neighborMask |= min( center1.x, center2.x ) > voxMax.x ? b3_posXNeighbor : 0;
+		neighborMask |= min( center1.x, center2.x ) >= voxMax.x ? b3_posXNeighbor : 0;
 		neighborMask |= max( center1.y, center2.y ) < voxMin.y ? b3_negYNeighbor : 0;
-		neighborMask |= min( center1.y, center2.y ) > voxMax.y ? b3_posYNeighbor : 0;
+		neighborMask |= min( center1.y, center2.y ) >= voxMax.y ? b3_posYNeighbor : 0;
 		neighborMask |= max( center1.z, center2.z ) < voxMin.z ? b3_negZNeighbor : 0;
-		neighborMask |= min( center1.z, center2.z ) > voxMax.z ? b3_posZNeighbor : 0;
+		neighborMask |= min( center1.z, center2.z ) >= voxMax.z ? b3_posZNeighbor : 0;
 		if ( ( flags & neighborMask ) != 0 )
 			continue;
 
@@ -896,7 +905,7 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 		b3Vec3 delta = b3Sub( closestSeg, closestVox );
 		b3Vec3 absDelta = b3Abs( delta );
 		int maxAxis = absDelta.x > absDelta.y ? ( absDelta.x > absDelta.z ? 0 : 2 ) : ( absDelta.y > absDelta.z ? 1 : 2 );
-		float maxDelta = ( (float*)&absDelta )[maxAxis];
+		float maxDelta = FLT( absDelta, maxAxis );
 		float epsSqr = distSqr * 0.998f * 0.998f;
 
 		// check for multiple contact points due to near parallelism
@@ -904,17 +913,17 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 		{
 			// get the normal of the reference face
 			b3Vec3 faceNormal = (b3Vec3){ 0.0f, 0.0f, 0.0f };
-			( (float*)&faceNormal )[maxAxis] = copysignf( 1.0f, ( (float*)&delta )[maxAxis] );
+			FLT( faceNormal, maxAxis ) = copysignf( 1.0f, FLT( delta, maxAxis ) );
 			int altAxisA = ( maxAxis + 1 ) % 3;
 			int altAxisB = ( maxAxis + 2 ) % 3;
 			float t1 = 0.0f, t2 = 1.0f;
 
 			// clip center1 to the reference face
 			{
-				float minA = ( (float*)&voxMin )[altAxisA];
-				float maxA = ( (float*)&voxMax )[altAxisA];
-				float vA1 = ( (float*)&center1 )[altAxisA];
-				float vA2 = ( (float*)&center2 )[altAxisA];
+				float minA = FLT( voxMin, altAxisA );
+				float maxA = FLT( voxMax, altAxisA );
+				float vA1 = FLT( center1, altAxisA );
+				float vA2 = FLT( center2, altAxisA );
 				float dA = vA2 - vA1;
 				if ( vA1 < minA )
 				{
@@ -927,10 +936,10 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 					t1 = max( t1, tn );
 				}
 
-				float minB = ( (float*)&voxMin )[altAxisB];
-				float maxB = ( (float*)&voxMax )[altAxisB];
-				float vB1 = ( (float*)&center1 )[altAxisB];
-				float vB2 = ( (float*)&center2 )[altAxisB];
+				float minB = FLT( voxMin, altAxisB );
+				float maxB = FLT( voxMax, altAxisB );
+				float vB1 = FLT( center1, altAxisB );
+				float vB2 = FLT( center2, altAxisB );
 				float dB = vB2 - vB1;
 				if ( vB1 < minB )
 				{
@@ -976,10 +985,10 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 
 			// clip center2 to the reference face
 			{
-				float minA = ( (float*)&voxMin )[altAxisA];
-				float maxA = ( (float*)&voxMax )[altAxisA];
-				float vA1 = ( (float*)&center1 )[altAxisA];
-				float vA2 = ( (float*)&center2 )[altAxisA];
+				float minA = FLT( voxMin, altAxisA );
+				float maxA = FLT( voxMax, altAxisA );
+				float vA1 = FLT( center1, altAxisA );
+				float vA2 = FLT( center2, altAxisA );
 				float dA = vA2 - vA1;
 				if ( vA2 < minA )
 				{
@@ -992,10 +1001,10 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 					t2 = min( t2, tn );
 				}
 
-				float minB = ( (float*)&voxMin )[altAxisB];
-				float maxB = ( (float*)&voxMax )[altAxisB];
-				float vB1 = ( (float*)&center1 )[altAxisB];
-				float vB2 = ( (float*)&center2 )[altAxisB];
+				float minB = FLT( voxMin, altAxisB );
+				float maxB = FLT( voxMax, altAxisB );
+				float vB1 = FLT( center1, altAxisB );
+				float vB2 = FLT( center2, altAxisB );
 				float dB = vB2 - vB1;
 				if ( vB2 < minB )
 				{
@@ -1363,25 +1372,7 @@ bool b3ComputeVoxelManifolds( b3World* world, int workerIndex, b3Contact* contac
 	for ( int i = 0; i < clusterCount; i++ )
 	{
 		VoxCluster* cluster = clusters + i;
-
 		cluster->count = b3ReduceCluster( cluster->points, cluster->count, cluster->normal, arena );
-
-		// filter out any duplicate points in the cluster. Collisions that land on a voxel border
-		// can be reported by both neighbors, so we need to remove duplicates to avoid jittering.
-		for ( int j = 0; j < cluster->count; j++ )
-		{
-			for ( int k = j + 1; k < cluster->count; k++ )
-			{
-				b3LocalManifoldPoint* ptA = cluster->points + j;
-				b3LocalManifoldPoint* ptB = cluster->points + k;
-				if ( b3DistanceSquared( ptA->point, ptB->point ) < FLT_EPSILON * FLT_EPSILON )
-				{
-					cluster->points[k] = cluster->points[cluster->count - 1];
-					cluster->count--;
-					k--;
-				}
-			}
-		}
 	}
 
 	// Make a temporary copy of previous manifolds
