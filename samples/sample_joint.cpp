@@ -1986,7 +1986,7 @@ public:
 		bodyDef.position.y = 0.5f * spacing;
 		bodyDef.type = b3_dynamicBody;
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density *= 2.0f;
+		shapeDef.baseMaterial.density *= 2.0f;
 
 		for ( int i = 0; i < 6; ++i )
 		{

@@ -393,7 +393,7 @@ static int ShapeExtents( void )
 	b3WorldId worldId = b3CreateWorld( &worldDef );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 
 	// Kinematic bodies measure from the body origin
 	b3BodyDef bodyDef = b3DefaultBodyDef();
