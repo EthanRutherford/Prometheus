@@ -32,6 +32,10 @@ static const b3Vec3W oneVW = { B3_STATIC_FLOAT_W( 1.0f ), B3_STATIC_FLOAT_W( 1.0
 // helper for extracting floats/ints from SIMD lanes or vector components.
 #define FLT( v, i ) ( ( (float*)&( v ) )[i] )
 #define INT( v, i ) ( ( (int*)&( v ) )[i] )
+#define COLUMN( mat, i ) ( ( (b3Vec3*)&( mat ) )[i] )
+
+static const uint32_t negAxisNeighbors[3] = { b3_negXNeighbor, b3_negYNeighbor, b3_negZNeighbor };
+static const uint32_t posAxisNeighbors[3] = { b3_posXNeighbor, b3_posYNeighbor, b3_posZNeighbor };
 
 typedef struct VoxelWide
 {
@@ -118,498 +122,6 @@ static b3AABB computeVoxelBounds( const b3VoxelData* voxels, b3Vec3 lower, b3Vec
 	b3Vec3 lowerBound = b3Max( b3Floor( lower ), voxels->bounds.lowerBound );
 	b3Vec3 upperBound = b3Min( b3Ceil( upper ), voxels->bounds.upperBound );
 	return (b3AABB){ lowerBound, upperBound };
-}
-
-// process an edge or corner voxel to extract corners and edges
-static void processVoxel( b3Vec3 voxMin, uint32_t flags, b3Vec3* corners, int* cornerCount, b3Vec3* edgePt0, b3Vec3* edgePt1,
-						  b3Vec3* edgeNorm0, b3Vec3* edgeNorm1, int* edgeCount )
-{
-#define VOX_CORNER( X, Y, Z ) corners[( *cornerCount )++] = ( (b3Vec3){ voxMin.x + ( X ), voxMin.y + ( Y ), voxMin.z + ( Z ) } );
-#define VOX_EDGE( X0, Y0, Z0, X1, Y1, Z1, NX0, NY0, NZ0, NX1, NY1, NZ1 )                                                         \
-	edgePt0[( *edgeCount )] = ( (b3Vec3){ voxMin.x + ( X0 ), voxMin.y + ( Y0 ), voxMin.z + ( Z0 ) } );                           \
-	edgePt1[( *edgeCount )] = ( (b3Vec3){ voxMin.x + ( X1 ), voxMin.y + ( Y1 ), voxMin.z + ( Z1 ) } );                           \
-	edgeNorm0[( *edgeCount )] = ( (b3Vec3){ NX0, NY0, NZ0 } );                                                                   \
-	edgeNorm1[( *edgeCount )] = ( (b3Vec3){ NX1, NY1, NZ1 } );                                                                   \
-	( *edgeCount )++;
-
-	/* clang-format off
-		This function's switch statement body was generated using the following javascript code:
-		function generate(posX, negX, posY, negY, posZ, negZ) {
-			// case label
-			const parts = [
-				posX ? "b3_posXNeighbor" : "",
-				negX ? "b3_negXNeighbor" : "",
-				posY ? "b3_posYNeighbor" : "",
-				negY ? "b3_negYNeighbor" : "",
-				posZ ? "b3_posZNeighbor" : "",
-				negZ ? "b3_negZNeighbor" : "",
-			].filter(x => x);
-
-			const label = `case ${parts.length ? parts.join(" | ") : "b3_noNeighbors"}:\n`;
-
-			let body = "";
-
-			// corners
-			const LUTX = [negX, posX];
-			const LUTY = [negY, posY];
-			const LUTZ = [negZ, posZ];
-			for (let x = 0; x <= 1; x++) {
-				for (let y = 0; y <= 1; y++) {
-					for (let z = 0; z <= 1; z++) {
-						if (!LUTX[x] && !LUTY[y] && !LUTZ[z])
-							body += `\tVOX_CORNER( ${x}, ${y}, ${z} )\n`;
-					}
-				}
-			}
-
-			// edges
-			const LUTLUT = [[LUTY, LUTZ], [LUTX, LUTZ], [LUTX, LUTY]];
-			for (let axis = 0; axis <= 2; axis++) {
-				for (let v0 = 0; v0 <= 1; v0++) {
-					for (let v1 = 0; v1 <= 1; v1++) {
-						if (!LUTLUT[axis][0][v0] && !LUTLUT[axis][1][v1]) {
-							let coord0 = [v0, v1];
-							let coord1 = [v0, v1];
-                            let norm0 = [v0 * 2 - 1, 0];
-                            let norm1 = [0, v1 * 2 - 1];
-							coord0.splice(axis, 0, 0);
-							coord1.splice(axis, 0, 1);
-                            norm0.splice(axis, 0, 0);
-                            norm1.splice(axis, 0, 0);
-                            
-							body += "\tVOX_EDGE( " +
-                                `${coord0[0]}, ` +
-                                `${coord0[1]}, ` +
-                                `${coord0[2]}, ` +
-                                `${coord1[0]}, ` +
-                                `${coord1[1]}, ` +
-                                `${coord1[2]}, ` +
-                                `${norm0[0]}, ` +
-                                `${norm0[1]}, ` +
-                                `${norm0[2]}, ` +
-                                `${norm1[0]}, ` +
-                                `${norm1[1]}, ` +
-                                `${norm1[2]} )\n`;
-						}
-					}
-				}
-			}
-
-			if (!body)
-				return "";
-
-			return label + body + "\tbreak;\n";
-		}
-
-		function genAll() {
-			let str = "";
-			for (let posX = 0; posX <= 1; posX++) {
-				for (let negX = 0; negX <= 1; negX++) {
-					for (let posY = 0; posY <= 1; posY++) {
-						for (let negY = 0; negY <= 1; negY++) {
-							for (let posZ = 0; posZ <= 1; posZ++) {
-								for (let negZ = 0; negZ <= 1; negZ++) {
-									str += generate(posX, negX, posY, negY, posZ, negZ);
-								}
-							}
-						}
-					}
-				}
-			}
-
-			return str;
-		}
-	clang-format on */
-
-	uint32_t voxelType = flags & b3_voxTypeMask;
-	B3_ASSERT( voxelType == b3_isEdgeVoxel || voxelType == b3_isCornerVoxel );
-	// corner voxels will usually only have one corner vertex, but may have
-	// 2, 4, or 8 depending on the configuration of neighboring voxels.
-	// A corner with 0 neighbors is a free floating cube, so all 8 corners are valid.
-	// A corner voxel with 1 neighbor invalidates all corners on that face, leaving 4 valid corners.
-	// A corner voxel with 2 neighbors forms an L shape, leaving 2 valid corners.
-	// A corner voxel with 3 neighbors forms a proper corner, leaving only the single corner vertex.
-
-	// edge voxels will usually have one edge, but could also have two or four depending on the configuration of
-	// neighboring voxels. An edge always has at least 1 pair of opposing neighbors, and up to two remaining
-	// neighbors. (3 remaining would mean a surface voxel, and all four would mean fully occluded)
-
-	uint32_t neighborFlags = flags & b3_voxNeighborsMask;
-	switch ( neighborFlags )
-	{
-		case b3_noNeighbors:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 0, 0, 1 )
-			VOX_CORNER( 0, 1, 0 )
-			VOX_CORNER( 0, 1, 1 )
-			VOX_CORNER( 1, 0, 0 )
-			VOX_CORNER( 1, 0, 1 )
-			VOX_CORNER( 1, 1, 0 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negZNeighbor:
-			VOX_CORNER( 0, 0, 1 )
-			VOX_CORNER( 0, 1, 1 )
-			VOX_CORNER( 1, 0, 1 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posZNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 0, 1, 0 )
-			VOX_CORNER( 1, 0, 0 )
-			VOX_CORNER( 1, 1, 0 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negYNeighbor:
-			VOX_CORNER( 0, 1, 0 )
-			VOX_CORNER( 0, 1, 1 )
-			VOX_CORNER( 1, 1, 0 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negYNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 0, 1, 1 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negYNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 0, 1, 0 )
-			VOX_CORNER( 1, 1, 0 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posYNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 0, 0, 1 )
-			VOX_CORNER( 1, 0, 0 )
-			VOX_CORNER( 1, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posYNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 0, 0, 1 )
-			VOX_CORNER( 1, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posYNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 1, 0, 0 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posYNeighbor | b3_negYNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			break;
-		case b3_posYNeighbor | b3_negYNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			break;
-		case b3_posYNeighbor | b3_negYNeighbor | b3_posZNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			break;
-		case b3_negXNeighbor:
-			VOX_CORNER( 1, 0, 0 )
-			VOX_CORNER( 1, 0, 1 )
-			VOX_CORNER( 1, 1, 0 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 1, 0, 1 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 1, 0, 0 )
-			VOX_CORNER( 1, 1, 0 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_negYNeighbor:
-			VOX_CORNER( 1, 1, 0 )
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_negYNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 1, 1, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_negYNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 1, 1, 0 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_negYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor:
-			VOX_CORNER( 1, 0, 0 )
-			VOX_CORNER( 1, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 1, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 1, 0, 0 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 1, 0, 0, 1, 0, 1, 1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor | b3_negYNeighbor:
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1 )
-			break;
-		case b3_negXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_posZNeighbor:
-			VOX_EDGE( 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 0, -1 )
-			break;
-		case b3_posXNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 0, 0, 1 )
-			VOX_CORNER( 0, 1, 0 )
-			VOX_CORNER( 0, 1, 1 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 0, 0, 1 )
-			VOX_CORNER( 0, 1, 1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 0, 1, 0 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_negYNeighbor:
-			VOX_CORNER( 0, 1, 0 )
-			VOX_CORNER( 0, 1, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_negYNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 0, 1, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_negYNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 0, 1, 0 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_negYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 1, 0, 0, 1, 1, -1, 0, 0, 0, 1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_CORNER( 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor | b3_negZNeighbor:
-			VOX_CORNER( 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor | b3_posZNeighbor:
-			VOX_CORNER( 0, 0, 0 )
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor | b3_posZNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 0, 1, -1, 0, 0, 0, -1, 0 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor | b3_negYNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_posYNeighbor | b3_negYNeighbor | b3_posZNeighbor:
-			VOX_EDGE( 0, 0, 0, 0, 1, 0, -1, 0, 0, 0, 0, -1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor:
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_posZNeighbor:
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_negYNeighbor:
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_negYNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_negYNeighbor | b3_posZNeighbor:
-			VOX_EDGE( 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, -1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_posYNeighbor:
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_posYNeighbor | b3_negZNeighbor:
-			VOX_EDGE( 0, 0, 1, 1, 0, 1, 0, -1, 0, 0, 0, 1 )
-			break;
-		case b3_posXNeighbor | b3_negXNeighbor | b3_posYNeighbor | b3_posZNeighbor:
-			VOX_EDGE( 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0, -1 )
-			break;
-
-		// a corner voxel should never have more than three neighboring voxels, and an edge voxel will
-		// never have more than four, so any other case should be unreachable
-		default:
-			B3_ASSERT( 0 );
-			break;
-	}
-#undef VOX_EDGE
-#undef VOX_CORNER
 }
 
 static void cacheRefreshCallback( uint64_t code, uint32_t index, void* context )
@@ -1074,10 +586,143 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 	}
 }
 
+static inline bool voxFacesVsHullSAT( b3Vec3 voxMin, b3Vec3 voxMax, uint32_t flags, b3AABB hullAABB, float specDist,
+									  float* bestSep, b3Vec3* bestNormal, int* normalAxis )
+{
+	// box face axis separation is just the distance between the voxel faces and the corresponding hull AABB faces.
+	float sepNegX = voxMin.x - hullAABB.upperBound.x;
+	float sepPosX = hullAABB.lowerBound.x - voxMax.x;
+	bool hasNegXNeighbor = flags & b3_negXNeighbor;
+	bool hasPosXNeighbor = flags & b3_posXNeighbor;
+	float tolNegX = hasNegXNeighbor ? 0.0f : specDist;
+	float tolPosX = hasPosXNeighbor ? 0.0f : specDist;
+	if ( sepPosX > tolPosX || sepNegX > tolNegX )
+		return true;
+
+	float sepNegY = voxMin.y - hullAABB.upperBound.y;
+	float sepPosY = hullAABB.lowerBound.y - voxMax.y;
+	bool hasNegYNeighbor = flags & b3_negYNeighbor;
+	bool hasPosYNeighbor = flags & b3_posYNeighbor;
+	float tolPosY = hasPosYNeighbor ? 0.0f : specDist;
+	float tolNegY = hasNegYNeighbor ? 0.0f : specDist;
+	if ( sepPosY > tolPosY || sepNegY > tolNegY )
+		return true;
+
+	float sepNegZ = voxMin.z - hullAABB.upperBound.z;
+	float sepPosZ = hullAABB.lowerBound.z - voxMax.z;
+	bool hasNegZNeighbor = flags & b3_negZNeighbor;
+	bool hasPosZNeighbor = flags & b3_posZNeighbor;
+	float tolPosZ = hasPosZNeighbor ? 0.0f : specDist;
+	float tolNegZ = hasNegZNeighbor ? 0.0f : specDist;
+	if ( sepPosZ > tolPosZ || sepNegZ > tolNegZ )
+		return true;
+
+	if ( !hasNegXNeighbor && sepNegX > *bestSep )
+	{
+		*bestSep = sepNegX;
+		*bestNormal = (b3Vec3){ -1.0f, 0.0f, 0.0f };
+		*normalAxis = 0;
+	}
+	if ( !hasPosXNeighbor && sepPosX > *bestSep )
+	{
+		*bestSep = sepPosX;
+		*bestNormal = (b3Vec3){ 1.0f, 0.0f, 0.0f };
+		*normalAxis = 0;
+	}
+	if ( !hasNegYNeighbor && sepNegY > *bestSep )
+	{
+		*bestSep = sepNegY;
+		*bestNormal = (b3Vec3){ 0.0f, -1.0f, 0.0f };
+		*normalAxis = 1;
+	}
+	if ( !hasPosYNeighbor && sepPosY > *bestSep )
+	{
+		*bestSep = sepPosY;
+		*bestNormal = (b3Vec3){ 0.0f, 1.0f, 0.0f };
+		*normalAxis = 1;
+	}
+	if ( !hasNegZNeighbor && sepNegZ > *bestSep )
+	{
+		*bestSep = sepNegZ;
+		*bestNormal = (b3Vec3){ 0.0f, 0.0f, -1.0f };
+		*normalAxis = 2;
+	}
+	if ( !hasPosZNeighbor && sepPosZ > *bestSep )
+	{
+		*bestSep = sepPosZ;
+		*bestNormal = (b3Vec3){ 0.0f, 0.0f, 1.0f };
+		*normalAxis = 2;
+	}
+
+	return false;
+}
+
+static inline bool hullFacesVsVoxSAT( b3Vec3 voxCenter, b3Vec3* supportDirs, b3Vec3* supportOffsets, uint32_t flags,
+									  const b3Plane* hullPlanes, int count, float* bestSep, int* bestFaceIndex )
+{
+	for ( int i = 0; i < count; i++ )
+	{
+		b3Plane face = hullPlanes[i];
+
+		// get OBB support
+		b3Vec3 support = b3Add( voxCenter, supportOffsets[i] );
+
+		// compute plane separation
+		float sep = b3Dot( face.normal, support ) - face.offset;
+		if ( sep > B3_SPECULATIVE_DISTANCE )
+			return true;
+
+		// check flags to see if this support face should be a candidate for MTV
+		b3Vec3 supportDir = supportDirs[i];
+		b3Vec3 absDir = b3Abs( supportDir );
+		int supportAxis = absDir.x > absDir.y ? ( absDir.x > absDir.z ? 0 : 2 ) : ( absDir.y > absDir.z ? 1 : 2 );
+		uint32_t supportMask = FLT(supportDir, supportAxis) >= 0.0f ? posAxisNeighbors[supportAxis] : negAxisNeighbors[supportAxis];
+		if ( ( flags & supportMask ) == 0 && sep > *bestSep )
+		{
+			*bestSep = sep;
+			*bestFaceIndex = i;
+		}
+	}
+
+	return false;
+}
+
+static inline bool voxEdgesVsHullSAT();
+
+// copy of getSupportWide from convex_manifold.c
+#define B3_HULL_BIT_COUNT 7
+static inline int b3GetSupportWide( b3Vec3 normal, const float* vx, const float* vy, const float* vz, int n, float bias )
+{
+	const b3FloatW nx = b3SplatW( normal.x );
+	const b3FloatW ny = b3SplatW( normal.y );
+	const b3FloatW nz = b3SplatW( normal.z );
+	const b3FloatW biasV = b3SplatW( bias );
+
+	// Start the minimum at a large value.
+	b3FloatW minValue = b3SplatW( B3_HUGE );
+
+	// Tail lanes hold vertex 0 with index bits >= vertexCount, so they never become the min value.
+	for ( int i = 0; i < n; i += 4 )
+	{
+		b3FloatW x = b3LoadW( vx + i );
+		b3FloatW y = b3LoadW( vy + i );
+		b3FloatW z = b3LoadW( vz + i );
+		b3FloatW d = b3AddW( b3MulW( nz, z ), b3AddW( b3MulW( ny, y ), b3MulW( nx, x ) ) );
+
+		// This is always positive.
+		b3FloatW value = b3SubW( biasV, d );
+		b3FloatW augmentedValue = b3EmbedIndexW( value, i, B3_HULL_BIT_COUNT );
+		minValue = b3MinW( minValue, augmentedValue );
+	}
+
+	// One horizontal min, the winning lane's value and index bits ride through.
+	return b3MinIndexW( minValue, B3_HULL_BIT_COUNT );
+}
+
 static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
 {
 	b3Matrix3 bToAMat = b3MakeMatrixFromQuat( bToA.q );
-	b3Matrix3 AToBMat = b3Transpose( bToAMat );
+	b3Matrix3 aToBMat = b3Transpose( bToAMat );
 
 	const b3Voxels voxelsA = context->voxelsA;
 	float invScale = 1.0f / voxelsA.scale;
@@ -1086,167 +731,564 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 
 	// compute the query bounds for the voxel grid. This is the AABB of the hull expanded by the speculative distance.
 	b3AABB hullAABB = b3ComputeHullAABB( context->hullB, bToA );
-	b3AABB queryBounds =
-		computeVoxelBounds( voxelsA.data, b3Sub( b3MulSV( invScale, hullAABB.lowerBound ), b3Vec3Of( specDist ) ),
-							b3Add( b3MulSV( invScale, hullAABB.upperBound ), b3Vec3Of( specDist ) ) );
+	hullAABB.lowerBound = b3MulSV( invScale, hullAABB.lowerBound );
+	hullAABB.upperBound = b3MulSV( invScale, hullAABB.upperBound );
+	b3AABB inflatedHullAABB = b3AABB_Inflate( hullAABB, specDist );
+	b3AABB queryBounds = computeVoxelBounds( voxelsA.data, inflatedHullAABB.lowerBound, inflatedHullAABB.upperBound );
 
 	// refresh the voxel cache
 	refreshVoxCache( context->contact, voxelsA.data, queryBounds );
 
+	// early exit if no voxels were in the query bounds
 	if ( context->contact->voxelCache.count == 0 )
 		return;
 
-	// hull corner vertices, in voxel space.
-	b3Vec3* hullCorners = b3Bump( &arena, context->hullB->vertexCount * sizeof( b3Vec3 ) );
-	int hullCornerCount = 0;
-	// hull planes in hull space.
+	// hull points in voxel space
+	b3Vec3* hullPoints = b3Bump( &arena, context->hullB->vertexCount * sizeof( b3Vec3 ) );
+	// hull planes in hull space
 	const b3Plane* hullPlanes = b3GetHullPlanes( context->hullB );
-	// hull edges, in hull space.
+	// hull faces
+	const b3HullFace* hullFaces = b3GetHullFaces( context->hullB );
+	// hull edges
 	const b3HullHalfEdge* hullEdges = b3GetHullEdges( context->hullB );
-	// hull points, in hull space.
-	const b3Vec3* hullPoints = b3GetHullPoints( context->hullB );
 
-	{ // gather hull corners in voxel space
-		b3AABB voxelsBounds = b3AABB_Inflate( voxelsA.data->bounds, specDist );
+	{ // transform hull points to voxel space
+		const b3Vec3* pts = b3GetHullPoints( context->hullB );
 		for ( int i = 0; i < context->hullB->vertexCount; i++ )
 		{
-			b3Vec3 pt = b3MulSV( invScale, transformPointMat( bToAMat, bToA.p, hullPoints[i] ) );
-			if ( b3AABB_Contains( voxelsBounds, (b3AABB){ pt, pt } ) )
-			{
-				hullCorners[hullCornerCount++] = pt;
-			}
+			hullPoints[i] = b3MulSV( invScale, transformPointMat( bToAMat, bToA.p, pts[i] ) );
 		}
 	}
 
-	// test hull vertices against voxels
-	for ( int i = 0; i < hullCornerCount; i++ )
+	// cache hull incedent face indices for each voxel face normal direction
+	int hullIncFaceIndices[6] = { -1, -1, -1, -1, -1, -1 };
+
+	// cache voxel supports per hull face
+	b3Vec3* voxSupportDirs = b3Bump( &arena, context->hullB->faceCount * sizeof( b3Vec3 ) );
+	b3Vec3* voxSupportOffsets = b3Bump( &arena, context->hullB->faceCount * sizeof( b3Vec3 ) );
+	float voxHalfExtent = 0.5f * context->voxelsA.scale;
+	for ( int i = 0; i < context->hullB->faceCount; i++ )
 	{
-		b3Vec3 pt = hullCorners[i];
-		for ( int j = 0; j < context->contact->voxelCache.count; j++ )
-		{
-			b3Vec3 voxMin = context->contact->voxelCache.data[j].min;
-			b3Vec3 voxMax = b3Add( voxMin, b3Vec3Of( 1.0f ) );
-			uint32_t flags = context->contact->voxelCache.data[j].flags;
-
-			// if there is a neighboring voxel which is closer to the hull vertex than this voxel, then skip this one.
-			uint32_t neighborMask = getNeighborMask( pt, voxMin, voxMax );
-			if ( ( flags & neighborMask ) != 0 )
-				continue;
-
-			// if the hull vertex is outside the voxel bounds, expanded by speculative distance, skip this one.
-			b3AABB voxelBounds = b3AABB_Inflate( (b3AABB){ voxMin, voxMax }, specDist );
-			if ( !b3AABB_Contains( voxelBounds, (b3AABB){ pt, pt } ) )
-				continue;
-
-			// use the neighbor flags to determine which faces are exposed, to use one as the normal.
-			// If there's more than one, use the one that points most directly towards the hull center.
-			b3Vec3 d = b3Sub( hullCenter, b3Add( voxMin, b3Vec3Of( 0.5f ) ) );
-
-			// which axes, pointed to the hull center, is neighborless
-			b3Vec3i axesMask = {
-				flags & ( d.x > 0 ? b3_posXNeighbor : b3_negXNeighbor ) ? 0 : 1,
-				flags & ( d.y > 0 ? b3_posYNeighbor : b3_negYNeighbor ) ? 0 : 1,
-				flags & ( d.z > 0 ? b3_posZNeighbor : b3_negZNeighbor ) ? 0 : 1,
-			};
-
-			if ( axesMask.x == 0 && axesMask.y == 0 && axesMask.z == 0 )
-				continue;
-
-			b3Vec3 filtered = b3Select( axesMask, d, b3Vec3_zero );
-
-			// compute the axis-aligned normal by finding the largest component of the filtered vector
-			b3Vec3 absD = b3Abs( filtered );
-			b3Vec3i axisMask = absD.x > absD.y ? ( absD.x > absD.z ? (b3Vec3i){ 1, 0, 0 } : (b3Vec3i){ 0, 0, 1 } )
-											   : ( absD.y > absD.z ? (b3Vec3i){ 0, 1, 0 } : (b3Vec3i){ 0, 0, 1 } );
-			b3Vec3 normal = b3Select( axisMask, b3Sign( filtered ), b3Vec3_zero );
-
-			// add a candidate point for the contact
-			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
-			cp->point = b3MulSV( voxelsA.scale, b3Clamp( pt, voxMin, voxMax ) );
-			cp->normal = normal;
-			cp->separation = b3Dot( normal, b3Sub( pt, b3Clamp( b3Add( voxMin, normal ), voxMin, voxMax ) ) ) * voxelsA.scale;
-		}
+		voxSupportDirs[i] = b3Neg( b3MulMV( bToAMat, hullPlanes[i].normal ) );
+		b3Vec3 corner = { copysignf( voxHalfExtent, voxSupportDirs[i].x ), copysignf( voxHalfExtent, voxSupportDirs[i].y ),
+						  copysignf( voxHalfExtent, voxSupportDirs[i].z ) };
+		voxSupportOffsets[i] = b3MulMV( aToBMat, corner );
 	}
 
-	// test corner and edge voxels against the hull
 	for ( int v = 0; v < context->contact->voxelCache.count; v++ )
 	{
-		// skip face voxels (internal voxels were filtered out before entering the cache)
-		b3VoxelCache* entry = context->contact->voxelCache.data + v;
-		if ( ( entry->flags & b3_voxTypeMask ) == b3_isFaceVoxel )
+		uint32_t flags = context->contact->voxelCache.data[v].flags;
+		b3Vec3 voxMin = context->contact->voxelCache.data[v].min;
+		b3Vec3 voxCenter = b3Add( voxMin, b3Vec3Of( 0.5f ) );
+		b3Vec3 cDir = b3Sub( hullCenter, voxCenter );
+
+		// cull voxels that are only back faces relative to the hull center
+		// (i.e., all exposed faces of the voxel are facing away from the hull)
+		uint32_t dirMask = 0;
+		dirMask |= cDir.x < 0 ? b3_negXNeighbor : b3_posXNeighbor;
+		dirMask |= cDir.y < 0 ? b3_negYNeighbor : b3_posYNeighbor;
+		dirMask |= cDir.z < 0 ? b3_negZNeighbor : b3_posZNeighbor;
+		if ( ( flags & dirMask ) == dirMask )
 			continue;
 
-		// gather the corners and edges of the voxel
-		b3Vec3 corners[8];
-		b3Vec3 edges0[12];
-		b3Vec3 edges1[12];
-		b3Vec3 norms0[12];
-		b3Vec3 norms1[12];
-		int cornerCount = 0;
-		int edgeCount = 0;
-		processVoxel( entry->min, entry->flags, corners, &cornerCount, edges0, edges1, norms0, norms1, &edgeCount );
+		b3Vec3 voxMax = b3Add( voxMin, b3Vec3Of( 1.0f ) );
 
-		// clip voxel corners against the hull, and add any that are inside as candidate points
-		for ( int i = 0; i < cornerCount; i++ )
+		// voxel center in hull space
+		b3Vec3 vcInB = invTransformPointMat( aToBMat, bToA.p, b3MulSV( voxelsA.scale, voxCenter ) );
+
+		// test voxel face axes against hull, skip voxel if separated
+		float bestSepA = -FLT_MAX;
+		b3Vec3 bestNormalA = { 0 };
+		int normalAxisA = -1;
+		if ( voxFacesVsHullSAT( voxMin, voxMax, flags, hullAABB, specDist, &bestSepA, &bestNormalA, &normalAxisA ) )
+			continue;
+
+		if ( ( flags & b3_isFaceVoxel ) == b3_isFaceVoxel )
 		{
-			b3Vec3 pt = invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, corners[i] ) );
+			// face voxels have no edges or corners exposed, so we only care about penetration along face normals.
+			// We don't care if there is edge or corner penetration, since the edges and corners of this voxel are non-structural.
+			// This is safe, because a face voxel by definition has neighbor voxels, which will either be penetrated by
+			// a hull vertex, or have an edge or corner that penetrates the hull. So, any voxel edge or voxel corner penetration
+			// will be covered by a nearby voxel's structural features. This also avoids ghost collisions on voxel boundaries.
+			// It could be argued that checking the other axes could allow for early outs, but when we build the contacts for
+			// a face voxel, we only add hull vertices within the bounds of the exposed face. Worst case is bounded by the number
+			// of vertices on the hull's incident face, and the checks for each vertex are exclusively less-than operations.
+			// Compare that to checking all hull faces (AND edges), which is by definition more numerous than the number of
+			// vertices of a single face, and involve dot products, cross products, and other heavy math. Face voxels will
+			// typically be the most common type of voxel, and we cache the incident face per normal direction to amortize the
+			// cost across voxels, so face voxels are drastically cheaper than a full generic SAT test per voxel.
 
-			float bestSeparation = -FLT_MAX;
-			b3Vec3 bestNormal = { 0 };
-			int bestFace = -1;
-			for ( int j = 0; j < context->hullB->faceCount; j++ )
-			{
-				b3Plane plane = hullPlanes[j];
-				float sep = b3PlaneSeparation( plane, pt );
-				if ( sep > B3_SPECULATIVE_DISTANCE )
-				{
-					bestFace = -1;
-					break;
-				}
-
-				if ( sep > bestSeparation )
-				{
-					bestSeparation = sep;
-					bestNormal = plane.normal;
-					bestFace = j;
-				}
-			}
-
-			// either no point was found or we found a separating axis
-			if ( bestFace == -1 )
+			// if there was no exposed face plane with penetration, exit early
+			if ( normalAxisA == -1 )
 				continue;
 
-			// add a candidate point for the contact (transform back into shape A space)
-			VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
-			cp->point = transformPointMat( bToAMat, bToA.p, pt );
-			cp->normal = b3Neg( b3MulMV( bToAMat, bestNormal ) );
-			cp->separation = bestSeparation;
+			int altAxis0 = ( normalAxisA + 1 ) % 3;
+			int altAxis1 = ( normalAxisA + 2 ) % 3;
+
+			// get or set cached incident face index for the voxel face normal direction
+			int cacheKey = ( normalAxisA << 1 ) | ( FLT( bestNormalA, normalAxisA ) < 0 ? 1 : 0 );
+			if ( hullIncFaceIndices[cacheKey] == -1 )
+			{
+				int soaVertexCountB = ( context->hullB->vertexCount + 3 ) & ~3;
+				const float* vxB = b3GetHullSoaVertices( context->hullB );
+				const float* vyB = vxB + soaVertexCountB;
+				const float* vzB = vyB + soaVertexCountB;
+
+				b3Vec3 cB = b3AABB_Center( context->hullB->aabb );
+				b3Vec3 hB = b3AABB_Extents( context->hullB->aabb );
+
+				b3Vec3 normalInB = b3MulMV( aToBMat, bestNormalA );
+				b3Vec3 direction = b3Neg( normalInB );
+				float biasB = b3Dot( direction, cB ) + 1.0625f * b3Dot( b3Abs( direction ), hB );
+				int supportIndex = b3GetSupportWide( b3Neg( normalInB ), vxB, vyB, vzB, soaVertexCountB, biasB );
+				hullIncFaceIndices[cacheKey] = b3FindIncidentFace( context->hullB, normalInB, supportIndex );
+			}
+
+			// iterate face vertices to find candidate contact points
+			int incFaceIndex = hullIncFaceIndices[cacheKey];
+			const b3HullFace* incFace = &hullFaces[incFaceIndex];
+			int edgeIndex = incFace->edge;
+			do
+			{
+				const b3HullHalfEdge* edge = &hullEdges[edgeIndex];
+				edgeIndex = edge->next;
+
+				b3Vec3 pt = hullPoints[edge->origin];
+				if ( FLT( pt, altAxis0 ) < FLT( voxMin, altAxis0 ) || FLT( pt, altAxis0 ) >= FLT( voxMax, altAxis0 ) ||
+					 FLT( pt, altAxis1 ) < FLT( voxMin, altAxis1 ) || FLT( pt, altAxis1 ) >= FLT( voxMax, altAxis1 ) )
+				{
+					continue;
+				}
+
+				float vh = FLT( pt, normalAxisA );
+				float vv = FLT( bestNormalA, normalAxisA ) < 0 ? FLT( voxMin, normalAxisA ) : FLT( voxMax, normalAxisA );
+				float sep = FLT( bestNormalA, normalAxisA ) < 0 ? vv - vh : vh - vv;
+				FLT( pt, normalAxisA ) = ( vh + vv ) * 0.5f;
+
+				// create a contact point for this hull vertex inside the voxel
+				VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
+				cp->point = b3MulSV( voxelsA.scale, pt );
+				cp->normal = bestNormalA;
+				cp->separation = sep * voxelsA.scale;
+			}
+			while ( edgeIndex != incFace->edge );
+
+			continue;
 		}
 
-		// clip voxel edges against hull edges, and add any that are inside as candidate points
-		float squaredTolerance = 0.005f * 0.005f;
-		for ( int i = 0; i < edgeCount; i++ )
+		// check hull face normals against voxel vertices, skip voxel if separated
+		// TODO: can we skip this for edge voxels, by the same logic we use on face voxels?
+		float bestSepB = -FLT_MAX;
+		int bestFaceIndexB = -1;
+		if ( hullFacesVsVoxSAT( vcInB, voxSupportDirs, voxSupportOffsets, flags, hullPlanes, context->hullB->faceCount, &bestSepB,
+								&bestFaceIndexB ) )
 		{
-			b3Vec3 vp0 = invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, edges0[i] ) );
-			b3Vec3 vp1 = invTransfromPointMat( AToBMat, bToA.p, b3MulSV( voxelsA.scale, edges1[i] ) );
-			b3Vec3 vn0 = b3MulMV( AToBMat, norms0[i] );
-			b3Vec3 vn1 = b3MulMV( AToBMat, norms1[i] );
-			b3Vec3 ve = b3Sub( vp1, vp0 );
+			continue;
+		}
 
-			for ( int j = 0; j < context->hullB->edgeCount; j += 2 )
+		// TODO: edge-edge contacts
+		// TODO: we can cache edge cross products per edge pair to amortize the cost across many voxels
+		float bestSepE = -FLT_MAX;
+
+		// scale bestSepB to be in same units as bestSepA/bestSepE
+		bestSepB = bestSepB * voxelsA.scale;
+
+		if ( bestSepA > bestSepB && bestSepA > bestSepE )
+		{
+			// alternate axes for the current face normal
+			int altAxis0 = ( normalAxisA + 1 ) % 3;
+			int altAxis1 = ( normalAxisA + 2 ) % 3;
+
+			bool canClipNegAxis0 = !( flags & negAxisNeighbors[altAxis0] );
+			bool canClipPosAxis0 = !( flags & posAxisNeighbors[altAxis0] );
+			bool canClipNegAxis1 = !( flags & negAxisNeighbors[altAxis1] );
+			bool canClipPosAxis1 = !( flags & posAxisNeighbors[altAxis1] );
+
+			// get or set cached incident face index for the voxel face normal direction
+			int cacheKey = ( normalAxisA << 1 ) | ( FLT( bestNormalA, normalAxisA ) < 0 ? 1 : 0 );
+			if ( hullIncFaceIndices[cacheKey] == -1 )
 			{
-				const b3HullHalfEdge* edge = hullEdges + j;
-				const b3HullHalfEdge* twin = hullEdges + j + 1;
-				B3_ASSERT( edge->twin == j + 1 && twin->twin == j );
+				int soaVertexCountB = ( context->hullB->vertexCount + 3 ) & ~3;
+				const float* vxB = b3GetHullSoaVertices( context->hullB );
+				const float* vyB = vxB + soaVertexCountB;
+				const float* vzB = vyB + soaVertexCountB;
 
-				b3Vec3 hp0 = hullPoints[edge->origin];
-				b3Vec3 he = b3Sub( hullPoints[twin->origin], hp0 );
+				b3Vec3 cB = b3AABB_Center( context->hullB->aabb );
+				b3Vec3 hB = b3AABB_Extents( context->hullB->aabb );
 
-				b3Vec3 hn0 = hullPlanes[edge->face].normal;
-				b3Vec3 hn1 = hullPlanes[twin->face].normal;
-
-				// TODO
+				b3Vec3 normalInB = b3MulMV( aToBMat, bestNormalA );
+				b3Vec3 direction = b3Neg( normalInB );
+				float biasB = b3Dot( direction, cB ) + 1.0625f * b3Dot( b3Abs( direction ), hB );
+				int supportIndex = b3GetSupportWide( b3Neg( normalInB ), vxB, vyB, vzB, soaVertexCountB, biasB );
+				hullIncFaceIndices[cacheKey] = b3FindIncidentFace( context->hullB, normalInB, supportIndex );
 			}
+
+			b3Vec3 polyBufferA[B3_MAX_CLIP_POINTS];
+			b3Vec3 polyBufferB[B3_MAX_CLIP_POINTS];
+
+			// build face polygon
+			b3Vec3* srcPoly = polyBufferA;
+			int srcPolyCount = 0;
+
+			int incFaceIndex = hullIncFaceIndices[cacheKey];
+			const b3HullFace* incFace = &hullFaces[incFaceIndex];
+
+			int edgeIndex = incFace->edge;
+			do
+			{
+				const b3HullHalfEdge* edge = &hullEdges[edgeIndex];
+				srcPoly[srcPolyCount++] = hullPoints[edge->origin];
+				edgeIndex = edge->next;
+			}
+			while ( edgeIndex != incFace->edge );
+
+			b3Vec3* dstPoly = polyBufferB;
+			int dstPolyCount = 0;
+
+			{ // clip polygon against clippable axes
+				if ( canClipNegAxis0 )
+				{
+					b3Vec3 p0 = srcPoly[srcPolyCount - 1];
+					float sep0 = FLT( voxMin, altAxis0 ) - FLT( p0, altAxis0 );
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						b3Vec3 p1 = srcPoly[i];
+						float sep1 = FLT( voxMin, altAxis0 ) - FLT( p1, altAxis0 );
+						if ( sep0 <= 0.0f && sep1 <= 0.0f )
+						{
+							// both points are inside the negative axis 0 clipping plane, keep the current point
+							dstPoly[dstPolyCount++] = p1;
+						}
+						else if ( sep0 <= 0.0f && sep1 > 0.0f )
+						{
+							// edge goes from inside to outside, keep intersection point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+						}
+						else if ( sep0 > 0.0f && sep1 <= 0.0f )
+						{
+							// edge goes from outside to inside, keep intersection and current point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+							dstPoly[dstPolyCount++] = p1;
+						}
+
+						p0 = p1;
+						sep0 = sep1;
+					}
+
+					B3_SWAP( srcPoly, dstPoly );
+					srcPolyCount = dstPolyCount;
+					dstPolyCount = 0;
+				}
+				if ( canClipNegAxis1 )
+				{
+					b3Vec3 p0 = srcPoly[srcPolyCount - 1];
+					float sep0 = FLT( voxMin, altAxis1 ) - FLT( p0, altAxis1 );
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						b3Vec3 p1 = srcPoly[i];
+						float sep1 = FLT( voxMin, altAxis1 ) - FLT( p1, altAxis1 );
+						if ( sep0 <= 0.0f && sep1 <= 0.0f )
+						{
+							// both points are inside the negative axis 1 clipping plane, keep the current point
+							dstPoly[dstPolyCount++] = p1;
+						}
+						else if ( sep0 <= 0.0f && sep1 > 0.0f )
+						{
+							// edge goes from inside to outside, keep intersection point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+						}
+						else if ( sep0 > 0.0f && sep1 <= 0.0f )
+						{
+							// edge goes from outside to inside, keep intersection and current point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+							dstPoly[dstPolyCount++] = p1;
+						}
+
+						p0 = p1;
+						sep0 = sep1;
+					}
+
+					B3_SWAP( srcPoly, dstPoly );
+					srcPolyCount = dstPolyCount;
+					dstPolyCount = 0;
+				}
+				if ( canClipPosAxis0 )
+				{
+					b3Vec3 p0 = srcPoly[srcPolyCount - 1];
+					float sep0 = FLT( p0, altAxis0 ) - FLT( voxMax, altAxis0 );
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						b3Vec3 p1 = srcPoly[i];
+						float sep1 = FLT( p1, altAxis0 ) - FLT( voxMax, altAxis0 );
+						if ( sep0 <= 0.0f && sep1 <= 0.0f )
+						{
+							// both points are inside the positive axis 0 clipping plane, keep the current point
+							dstPoly[dstPolyCount++] = srcPoly[i];
+						}
+						else if ( sep0 <= 0.0f && sep1 > 0.0f )
+						{
+							// edge goes from inside to outside, keep intersection point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+						}
+						else if ( sep0 > 0.0f && sep1 <= 0.0f )
+						{
+							// edge goes from outside to inside, keep intersection and current point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+							dstPoly[dstPolyCount++] = p1;
+						}
+
+						p0 = p1;
+						sep0 = sep1;
+					}
+
+					B3_SWAP( srcPoly, dstPoly );
+					srcPolyCount = dstPolyCount;
+					dstPolyCount = 0;
+				}
+				if ( canClipPosAxis1 )
+				{
+					b3Vec3 p0 = srcPoly[srcPolyCount - 1];
+					float sep0 = FLT( p0, altAxis1 ) - FLT( voxMax, altAxis1 );
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						b3Vec3 p1 = srcPoly[i];
+						float sep1 = FLT( p1, altAxis1 ) - FLT( voxMax, altAxis1 );
+						if ( sep0 <= 0.0f && sep1 <= 0.0f )
+						{
+							// both points are inside the positive axis 1 clipping plane, keep the current point
+							dstPoly[dstPolyCount++] = p1;
+						}
+						else if ( sep0 <= 0.0f && sep1 > 0.0f )
+						{
+							// edge goes from inside to outside, keep intersection point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+						}
+						else if ( sep0 > 0.0f && sep1 <= 0.0f )
+						{
+							// edge goes from outside to inside, keep intersection and current point
+							float t = sep0 / ( sep0 - sep1 );
+							dstPoly[dstPolyCount++] = b3Lerp( p0, p1, t );
+							dstPoly[dstPolyCount++] = p1;
+						}
+
+						p0 = p1;
+						sep0 = sep1;
+					}
+
+					B3_SWAP( srcPoly, dstPoly );
+					srcPolyCount = dstPolyCount;
+					dstPolyCount = 0;
+				}
+			}
+			{ // cull points outside of unclippable axes
+				if ( !canClipNegAxis0 )
+				{
+					int j = 0;
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						if ( FLT( srcPoly[i], altAxis0 ) >= FLT( voxMin, altAxis0 ) )
+						{
+							srcPoly[j++] = srcPoly[i];
+						}
+					}
+					srcPolyCount = j;
+				}
+				if ( !canClipNegAxis1 )
+				{
+					int j = 0;
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						if ( FLT( srcPoly[i], altAxis1 ) >= FLT( voxMin, altAxis1 ) )
+						{
+							srcPoly[j++] = srcPoly[i];
+						}
+					}
+					srcPolyCount = j;
+				}
+				if ( !canClipPosAxis0 )
+				{
+					int j = 0;
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						if ( FLT( srcPoly[i], altAxis0 ) < FLT( voxMax, altAxis0 ) )
+						{
+							srcPoly[j++] = srcPoly[i];
+						}
+					}
+					srcPolyCount = j;
+				}
+				if ( !canClipPosAxis1 )
+				{
+					int j = 0;
+					for ( int i = 0; i < srcPolyCount; i++ )
+					{
+						if ( FLT( srcPoly[i], altAxis1 ) < FLT( voxMax, altAxis1 ) )
+						{
+							srcPoly[j++] = srcPoly[i];
+						}
+					}
+					srcPolyCount = j;
+				}
+			}
+
+			// add contacts for each point that survived clipping
+			for ( int i = 0; i < srcPolyCount; i++ )
+			{
+				b3Vec3 pt = srcPoly[i];
+				float vh = FLT( pt, normalAxisA );
+				float vv = FLT( bestNormalA, normalAxisA ) < 0 ? FLT( voxMin, normalAxisA ) : FLT( voxMax, normalAxisA );
+				float sep = FLT( bestNormalA, normalAxisA ) < 0 ? vv - vh : vh - vv;
+				FLT( pt, normalAxisA ) = ( vh + vv ) * 0.5f;
+
+				// create a contact point for this vertex inside the voxel
+				VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
+				cp->point = b3MulSV( voxelsA.scale, pt );
+				cp->normal = bestNormalA;
+				cp->separation = sep * voxelsA.scale;
+			}
+		}
+		else if ( bestSepB > bestSepE )
+		{
+			const b3Vec3* hullpts = b3GetHullPoints( context->hullB );
+			const b3HullFace* faceB = &hullFaces[bestFaceIndexB];
+			const b3Plane* planeB = &hullPlanes[bestFaceIndexB];
+			b3Vec3 dir = voxSupportDirs[bestFaceIndexB];
+			b3Vec3 absDir = b3Abs( dir );
+
+			// get ref face on voxel
+			int normalAxis = absDir.x > absDir.y ? ( absDir.x > absDir.z ? 0 : 2 ) : ( absDir.y > absDir.z ? 1 : 2 );
+			int altAxis0 = ( normalAxis + 1 ) % 3;
+			int altAxis1 = ( normalAxis + 2 ) % 3;
+
+			bool edgeCanCollide[5] = {
+				!( flags & posAxisNeighbors[altAxis0] ),
+				!( flags & negAxisNeighbors[altAxis1] ),
+				!( flags & negAxisNeighbors[altAxis0] ),
+				!( flags & posAxisNeighbors[altAxis1] ),
+				true, // sentinel for edges created during clipping, which are not part of the original face
+			};
+
+			b3Vec3 normalOffset = b3MulSV( copysignf( voxHalfExtent, FLT( dir, normalAxis ) ), COLUMN( aToBMat, normalAxis ) );
+			b3Vec3 altOffset0 = b3MulSV( voxHalfExtent, COLUMN( aToBMat, altAxis0 ) );
+			b3Vec3 altOffset1 = b3MulSV( voxHalfExtent, COLUMN( aToBMat, altAxis1 ) );
+
+			b3Vec3 polyBufferA[B3_MAX_CLIP_POINTS];
+			b3Vec3 polyBufferB[B3_MAX_CLIP_POINTS];
+			int edgeBufferA[B3_MAX_CLIP_POINTS];
+			int edgeBufferB[B3_MAX_CLIP_POINTS];
+
+			// create clip polygon for the reference face on the voxel
+			b3Vec3 faceCenter = b3Add( vcInB, normalOffset );
+			b3Vec3* srcPoly = polyBufferA;
+			int* srcEdges = edgeBufferA;
+			int srcPolyCount = 4;
+			srcPoly[0] = b3Add( faceCenter, b3Add( altOffset0, altOffset1 ) );
+			srcPoly[1] = b3Add( faceCenter, b3Add( altOffset0, b3Neg( altOffset1 ) ) );
+			srcPoly[2] = b3Add( faceCenter, b3Add( b3Neg( altOffset0 ), b3Neg( altOffset1 ) ) );
+			srcPoly[3] = b3Add( faceCenter, b3Add( b3Neg( altOffset0 ), altOffset1 ) );
+			srcEdges[0] = 0;
+			srcEdges[1] = 1;
+			srcEdges[2] = 2;
+			srcEdges[3] = 3;
+
+			b3Vec3* dstPoly = polyBufferB;
+			int* dstEdges = edgeBufferB;
+			int dstPolyCount = 0;
+
+			int edgeIndex = faceB->edge;
+			do
+			{
+				// get clipping plane
+				const b3HullHalfEdge* edge = hullEdges + edgeIndex;
+				int nextEdgeIndex = edge->next;
+				const b3HullHalfEdge* next = hullEdges + nextEdgeIndex;
+				b3Vec3 vertex1 = hullpts[edge->origin];
+				b3Vec3 vertex2 = hullpts[next->origin];
+				b3Vec3 tangent = b3Normalize( b3Sub( vertex2, vertex1 ) );
+				b3Vec3 binormal = b3Cross( tangent, planeB->normal );
+				b3Plane clipPlane = b3MakePlaneFromNormalAndPoint( binormal, vertex1 );
+
+				b3Vec3 p0 = srcPoly[srcPolyCount - 1];
+				int e0 = srcEdges[srcPolyCount - 1];
+				float sep0 = b3PlaneSeparation( clipPlane, p0 );
+				for ( int i = 0; i < srcPolyCount; i++ )
+				{
+					b3Vec3 p1 = srcPoly[i];
+					int e1 = srcEdges[i];
+
+					float sep1 = b3PlaneSeparation( clipPlane, p1 );
+					if ( sep0 <= 0.0f && sep1 <= 0.0f )
+					{
+						// both points are inside the clipping plane, keep the current point
+						dstPoly[dstPolyCount] = p1;
+						dstEdges[dstPolyCount] = e1;
+						dstPolyCount++;
+					}
+					else if ( sep0 <= 0.0f && sep1 > 0.0f )
+					{
+						// edge goes from inside to outside, keep intersection point
+						b3Vec3 intersection = b3Lerp( p0, p1, sep0 / ( sep0 - sep1 ) );
+						dstPoly[dstPolyCount] = intersection;
+						dstEdges[dstPolyCount] = 4; // dropping p1, so new edge
+						dstPolyCount++;
+					}
+					else if ( sep0 > 0.0f && sep1 <= 0.0f )
+					{
+						// edge goes from outside to inside, keep intersection and current point
+						b3Vec3 intersection = b3Lerp( p0, p1, sep0 / ( sep0 - sep1 ) );
+						dstPoly[dstPolyCount] = intersection;
+						dstEdges[dstPolyCount] = e0;
+						dstPolyCount++;
+						dstPoly[dstPolyCount] = p1;
+						dstEdges[dstPolyCount] = e1;
+						dstPolyCount++;
+					}
+
+					p0 = p1;
+					e0 = e1;
+					sep0 = sep1;
+				}
+
+				// swap buffers
+				B3_SWAP( srcPoly, dstPoly );
+				B3_SWAP( srcEdges, dstEdges );
+				srcPolyCount = dstPolyCount;
+				dstPolyCount = 0;
+
+				edgeIndex = edge->next;
+			}
+			while ( edgeIndex != faceB->edge );
+
+			// add contacts for each point that survived clipping
+			for ( int i = 0, j = srcPolyCount - 1; i < srcPolyCount; j = i, i++ )
+			{
+				// if the point lies along a non-structural edge, cull it
+				int incomingEdge = srcEdges[j];
+				int outgoingEdge = srcEdges[i];
+				if ( !edgeCanCollide[incomingEdge] || !edgeCanCollide[outgoingEdge] )
+					continue;
+
+				b3Vec3 point = srcPoly[i];
+				float sep = b3PlaneSeparation( *planeB, point );
+				b3Vec3 pt = transformPointMat( bToAMat, bToA.p, point );
+				b3Vec3 normal = b3MulMV( bToAMat, planeB->normal );
+
+				VoxCandidatePoint* cp = context->pointBuffer + context->pointCount++;
+				cp->point = pt;
+				cp->normal = b3Neg( normal );
+				cp->separation = sep;
+			}
+		}
+		else
+		{
+			// TODO: handle edge-edge contact
 		}
 	}
 }
