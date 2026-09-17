@@ -619,7 +619,6 @@ static void b3CollideTask( int startIndex, int endIndex, int workerIndex, void* 
 		bool isStaticA = bodyA->type == b3_staticBody;
 		bool isStaticB = bodyB->type == b3_staticBody;
 		bool wasTouching = ( contact->flags & b3_simTouchingFlag );
-		bool isMeshContact = ( contact->flags & b3_simMeshContact );
 		b3BodySim* bodySimA;
 		b3BodySim* bodySimB;
 		if ( wasTouching )
@@ -657,7 +656,7 @@ static void b3CollideTask( int startIndex, int endIndex, int workerIndex, void* 
 		// Contact recycling optimization. Please cite this library if you use this optimization.
 		// This is inspired by persistent contact manifolds used in some physics engines, such as PhysX.
 		// However, this allows larger relative motion and has fewer tuning parameters (just one).
-		if ( ( isFast == false || isMeshContact == false ) && recycleDistance > 0.0f &&
+		if ( isFast == false && recycleDistance > 0.0f &&
 			 ( contact->flags & b3_relativeTransformValid ) && ( contact->flags & b3_contactRecycleFlag ) )
 		{
 			// The scalar part of b3InvMulQuat is just the quaternion dot product.
@@ -1153,6 +1152,7 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 		world->finishTaskFcn( world->userTreeTask, world->userTaskContext );
 		world->userTreeTask = NULL;
 		world->activeTaskCount -= 1;
+		b3ValidateNoEnlarged( &world->broadPhase );
 	}
 
 	// Update sensors
