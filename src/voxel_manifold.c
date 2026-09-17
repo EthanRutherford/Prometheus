@@ -688,24 +688,14 @@ static inline bool hullFacesVsVoxSAT( b3Vec3 voxCenter, b3Vec3* supportDirs, b3V
 	return false;
 }
 
-static inline bool voxEdgesVsHullSAT( b3Vec3 voxCenter, uint32_t flags, b3Vec3 cDir, const b3HullHalfEdge* edges, int count,
-									  b3Vec3* edgeDirs, b3Vec3* hullPoints, float specDist, float* bestSep, int* bestEdgeIndex,
+static inline bool voxEdgesVsHullSAT( b3Vec3 voxCenter, uint32_t flags, const b3HullHalfEdge* edges, int count, b3Vec3* edgeDirs,
+									  b3Vec3* offsets, b3Vec3* hullPoints, float specDist, float* bestSep, int* bestEdgeIndex,
 									  int* bestAxis )
 {
 	for ( int i = 0; i < count; i += 2 )
 	{
 		const b3HullHalfEdge* edge = edges + i;
 		b3Vec3 bv0 = hullPoints[edge->origin];
-
-		// pick the closest voxel corner to the hull edge as a support point.
-		// By definition of an axis-aligned box, this corner is therefore a point on the three closest voxel edges to this hull
-		// edge. Our separation computation can use any arbitrary point along the edge, so this same support can be used to
-		// calculate separation on all three axes.
-		b3Vec3 offset = (b3Vec3){ copysignf( 0.5f, cDir.x ), copysignf( 0.5f, cDir.y ), copysignf( 0.5f, cDir.z ) };
-		b3Vec3 support = b3Add( voxCenter, offset );
-
-		// vector to use for separation dot product
-		b3Vec3 sepVectorComponent = b3Sub( support, bv0 );
 
 		for ( int axis = 0; axis < 3; axis++ )
 		{
@@ -717,8 +707,11 @@ static inline bool voxEdgesVsHullSAT( b3Vec3 voxCenter, uint32_t flags, b3Vec3 c
 			if ( fabsf( normal.x ) + fabsf( normal.y ) + fabsf( normal.z ) == 0.0f )
 				continue;
 
+			b3Vec3 offset = offsets[( i / 2 ) * 3 + axis];
+			b3Vec3 av0 = b3Add( voxCenter, offset );
+
 			// check separation from voxel edge to hull edge along this axis
-			float sep = -b3Dot( normal, sepVectorComponent );
+			float sep = -b3Dot( normal, b3Sub( av0, bv0 ) );
 			if ( sep > specDist )
 				return true;
 
@@ -726,8 +719,8 @@ static inline bool voxEdgesVsHullSAT( b3Vec3 voxCenter, uint32_t flags, b3Vec3 c
 			{
 				// check neighbor flags to see if this is a valid contact edge
 				int mask = 0;
-				mask = mask & ( FLT( offset, altAxis0 ) >= 0.0f ? posAxisNeighbors[altAxis0] : negAxisNeighbors[altAxis0] );
-				mask = mask & ( FLT( offset, altAxis1 ) >= 0.0f ? posAxisNeighbors[altAxis1] : negAxisNeighbors[altAxis1] );
+				mask = mask | ( FLT( offset, altAxis0 ) >= 0.0f ? posAxisNeighbors[altAxis0] : negAxisNeighbors[altAxis0] );
+				mask = mask | ( FLT( offset, altAxis1 ) >= 0.0f ? posAxisNeighbors[altAxis1] : negAxisNeighbors[altAxis1] );
 				if ( ( flags & mask ) == 0 )
 				{
 					*bestSep = sep;
@@ -780,6 +773,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	const b3HullData* hullB = context->hullB;
 	float invScale = 1.0f / voxelsA.scale;
 	float specDist = B3_SPECULATIVE_DISTANCE * invScale;
+	float edgeTolerance = B3_LINEAR_SLOP * invScale;
 	b3Vec3 hullCenter = b3MulSV( invScale, transformPointMat( bToAMat, bToA.p, hullB->center ) );
 
 	// compute the query bounds for the voxel grid. This is the AABB of the hull expanded by the speculative distance.
@@ -829,6 +823,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	}
 
 	// cache edge separating axes
+	b3Vec3* edgeOffsets = b3Bump( &arena, 3 * hullB->edgeCount / 2 * sizeof( b3Vec3 ) );
 	b3Vec3* edgeDirs = b3Bump( &arena, 3 * hullB->edgeCount / 2 * sizeof( b3Vec3 ) );
 	memset( edgeDirs, 0, 3 * hullB->edgeCount / 2 * sizeof( b3Vec3 ) );
 	for ( int i = 0; i < hullB->edgeCount; i += 2 )
@@ -838,6 +833,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 		const b3HullHalfEdge* edge = hullEdges + i;
 		const b3HullHalfEdge* twin = hullEdges + edge->twin;
 
+		b3Vec3 DC = b3Neg( b3Sub( hullPoints[twin->origin], hullPoints[edge->origin] ) );
 		b3Vec3 bC = b3Neg( b3MulMV( bToAMat, hullPlanes[edge->face].normal ) );
 		b3Vec3 bD = b3Neg( b3MulMV( bToAMat, hullPlanes[twin->face].normal ) );
 
@@ -846,20 +842,22 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 			// for our edges, there's a neat property we can take advantage of. Since we're operating in *voxel* space,
 			// all face normals are aligned with the coordinate axes, and all edge directions are also aligned with
 			// the coordinate axes. In addition, we're in voxel scale, which means that each edge direction is also a
-			// unit vector, so all of the voxel vectors are vectors with a 1/-1 component, and two 0 components.
-			// Taking the dot product of such a vector and another arbitrary vector, the 0s will cancel out, and the non-zero
-			// axis will be 1 * b[axis], so the whole dot product reduces down to just extracting the relevant component of the
-			// second vector. In addition, we reduce all 12 box edges down to just 3 unique directions aligned with the coordinate
-			// axes. When doing a specific voxel to hull check later, the relative orientation of the voxel edge to the hull edge
-			// is used to determine which of the four parallel edges of the voxel along that axis to use.
+			// unit vector, so all of the voxel vectors are vectors with a 1/-1 component, and two 0 components. Taking the dot
+			// product of such a vector and another arbitrary vector, the 0s will cancel out, and the non-zero axis will be 1 *
+			// b[axis], so the whole dot product reduces down to just extracting the relevant component of the second vector. In
+			// addition, we reduce all 12 box edges down to just 3 unique directions aligned with the coordinate axes.
 
-			const float EPS = -0.0001f;
+			int altAxis0 = ( axis + 1 ) % 3;
+			int altAxis1 = ( axis + 2 ) % 3;
+			static const float EPS = -0.0001f;
 
 			// our "dot products" of aDir . bFaceNormal
 			float CBA = FLT( bC, axis );
 			float DBA = FLT( bD, axis );
 
 			// if the "dot products" have the same sign or are very close to zero, the edge is not a separating axis.
+			// point the same direction = the edge cannot pass through both face planes
+			// one or the other near zero = the edge is near parallel to one of the face planes
 			if ( CBA * DBA >= EPS )
 				continue;
 
@@ -868,10 +866,35 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 			if ( maxCD <= B3_PARALLEL_EDGE_TOL )
 				continue;
 
+			// now we need to do the same, but in the opposite direction (bDir . aFaceNormal)
+			// however, we don't yet know which of the four parallel cube edges we're going to choose yet.
+			// So, while we know our face normals point along the other two coordinate axes, we don't know which
+			// *direction* along those axes the faces point. However, this isn't a problem precisely *because*
+			// we haven't selected a specific edge yet. We can still reject if bDir is near parallel to the cube's
+			// face planes by checking if either "dot product" is near zero. In any *other* case, two of the four
+			// edges will have face normals that point in the *same* direction relative to bDir, but by definition
+			// that means the other two have normals that point in *opposite* directions. We don't need to "check"
+			// for opposite signs, because we know that, if not parallel to a face, exactly two of the edges would
+			// pass that check, so long as we choose one of those two edges. And we can do just that below.
+			float ADC = FLT( DC, altAxis0 );
+			float BDC = FLT( DC, altAxis1 );
+
+			// if either is near zero, again the edge (all four of them) is near parallel to one of the face planes.
+			if ( -fabsf( ADC * BDC ) >= EPS )
+				continue;
+
 			// now we can compute our normal vector/separating axis
 			float t = -CBA / ( DBA - CBA );
 			b3Vec3 normal = b3Normalize( b3Lerp( bC, bD, t ) );
 
+			// finally, we select which edge to use based on the direction our normal, computed from
+			// b's face normals, is pointing. Offset is one of the endpoints of the selected edge.
+			b3Vec3 offset = { 0 };
+			FLT( offset, axis ) = 0.5f;
+			FLT( offset, altAxis0 ) = copysignf( 0.5f, FLT( normal, altAxis0 ) );
+			FLT( offset, altAxis1 ) = copysignf( 0.5f, FLT( normal, altAxis1 ) );
+
+			edgeOffsets[( i / 2 ) * 3 + axis] = offset;
 			edgeDirs[( i / 2 ) * 3 + axis] = normal;
 		}
 	}
@@ -988,21 +1011,22 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 			continue;
 		}
 
-		// TODO: edge-edge contacts
-		// TODO: we can cache edge cross products per edge pair to amortize the cost across many voxels
+		// check voxel edges against hull edges, skip voxel if separated
 		float bestSepE = -FLT_MAX;
 		int bestEdgeIndexB = -1;
 		int bestAxisA = -1;
-		if ( voxEdgesVsHullSAT( voxCenter, flags, cDir, hullEdges, hullB->edgeCount, edgeDirs, hullPoints, specDist, &bestSepE,
-								&bestEdgeIndexB, &bestAxisA ) )
+		if ( voxEdgesVsHullSAT( voxCenter, flags, hullEdges, hullB->edgeCount, edgeDirs, edgeOffsets, hullPoints, specDist,
+								&bestSepE, &bestEdgeIndexB, &bestAxisA ) )
 		{
 			continue;
 		}
 
-		// scale bestSepB to be in same units as bestSepA/bestSepE
+		// scale bestSepB to be in same units as bestSepA
 		bestSepB = bestSepB * voxelsA.scale;
 
-		if ( bestSepA > bestSepB && bestSepA > bestSepE )
+		int preClipCount = context->pointCount;
+		float clipSep = FLT_MAX;
+		if ( bestSepA > bestSepB )
 		{
 			// alternate axes for the current face normal
 			int altAxis0 = ( normalAxisA + 1 ) % 3;
@@ -1261,9 +1285,10 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 				cp->point = b3MulSV( voxelsA.scale, pt );
 				cp->normal = bestNormalA;
 				cp->separation = sep * voxelsA.scale;
+				clipSep = min( clipSep, cp->separation );
 			}
 		}
-		else if ( bestSepB > bestSepE )
+		else
 		{
 			const b3Vec3* hullpts = b3GetHullPoints( hullB );
 			const b3HullFace* faceB = &hullFaces[bestFaceIndexB];
@@ -1393,9 +1418,13 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 				cp->point = pt;
 				cp->normal = b3Neg( normal );
 				cp->separation = sep;
+				clipSep = min( clipSep, cp->separation );
 			}
 		}
-		else
+
+		// attempt edge contact if no face clipping points survived, or if edge contact is better.
+		int outPoints = context->pointCount - preClipCount;
+		if ( bestEdgeIndexB != -1 && ( outPoints == 0 || bestSepE * voxelsA.scale > clipSep + edgeTolerance ) )
 		{
 			const b3HullHalfEdge* edge = hullEdges + bestEdgeIndexB;
 			const b3HullHalfEdge* twin = hullEdges + edge->twin;
@@ -1406,7 +1435,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 			b3Vec3 pt1B = hullPoints[twin->origin];
 			b3Vec3 eB = b3Sub( pt1B, pt0B );
 
-			b3Vec3 offset = (b3Vec3){ copysignf( 0.5f, cDir.x ), copysignf( 0.5f, cDir.y ), copysignf( 0.5f, cDir.z ) };
+			b3Vec3 offset = edgeOffsets[( bestEdgeIndexB / 2 ) * 3 + axis];
 			b3Vec3 pt0A = b3Add( voxCenter, offset );
 
 			// flip the offset of the edge dir axis to get the opposite corner
@@ -1419,6 +1448,8 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 			if ( !b3IsWithinSegments( &result ) )
 				continue;
 
+			// overwrite any face clipping points added with the better edge clip point
+			context->pointCount = preClipCount;
 			float separation = b3Dot( normal, b3Sub( result.point2, result.point1 ) );
 			b3Vec3 point = b3MulSV( 0.5f, b3Add( result.point1, result.point2 ) );
 

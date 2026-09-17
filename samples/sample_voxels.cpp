@@ -675,3 +675,42 @@ private:
 };
 
 static int sampleVoxelHullCollision = RegisterSample( "Voxels", "Voxel Hull Collision", VoxelHullCollision::Create );
+
+class SingleVoxel : public Sample
+{
+public:
+	SingleVoxel( SampleContext* context )
+		: Sample( context )
+	{
+		if ( context->restart == false )
+		{
+			m_camera->SetView( 0.0f, 25.0f, 10.0f, b3Pos_zero );
+		}
+
+		AddGroundBox( 20.0f );
+
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		bodyDef.type = b3BodyType::b3_dynamicBody;
+		bodyDef.position = { 2.0f, 2.5f, 0.0f };
+		b3BodyId voxelBodyB = b3CreateBody( m_worldId, &bodyDef );
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		m_voxels = createVoxelBox( 1.0f, 1.0f, 1.0f );
+
+		b3CreateVoxelShape( voxelBodyB, &shapeDef, m_voxels, 1.0f );
+	}
+
+	~SingleVoxel() override
+	{
+		b3DestroyVoxels( m_voxels );
+	}
+
+	static Sample* Create( SampleContext* context )
+	{
+		return new SingleVoxel( context );
+	}
+
+private:
+	b3VoxelData* m_voxels = nullptr;
+};
+
+static int sampleSingleVoxel = RegisterSample( "Voxels", "Single Voxel", SingleVoxel::Create );
