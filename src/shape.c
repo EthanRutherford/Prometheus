@@ -200,6 +200,8 @@ static b3Shape* b3CreateShapeInternal( b3World* world, b3Body* body, b3WorldTran
 
 	if ( shape->type == b3_compoundShape )
 	{
+		world->compoundShapeCount += 1;
+
 		// Own a copy of the compound materials so every shape frees its array the same way. Compounds
 		// are few, so the copy is cheap and avoids aliasing the geometry blob.
 		int materialCount = shape->compound->materialCount;
@@ -506,6 +508,12 @@ b3ShapeId b3CreateVoxelShape( b3BodyId bodyId, const b3ShapeDef* def, const b3Vo
 static void b3DestroyShapeInternal( b3World* world, b3Shape* shape, b3Body* body, bool wakeBodies )
 {
 	int shapeId = shape->id;
+
+	if ( shape->type == b3_compoundShape )
+	{
+		B3_ASSERT( world->compoundShapeCount > 0 );
+		world->compoundShapeCount -= 1;
+	}
 
 	// Remove the shape from the body's doubly linked list.
 	if ( shape->prevShapeId != B3_NULL_INDEX )
