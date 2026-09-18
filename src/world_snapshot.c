@@ -565,6 +565,14 @@ static void b3SerShapes( b3RecBuffer* buf, b3World* world, b3Recording* rec )
 				b3SnapW_U32( buf, gid );
 				break;
 			}
+			case b3_voxelShape:
+			{
+				b3SnapW_I32( buf, (int)b3_voxelShape );
+				uint32_t gid = b3RecInternVoxels( rec, src->voxels.data );
+				b3SnapW_U32( buf, gid );
+				b3SnapW_Bytes( buf, &src->voxels.scale, sizeof( float ) );
+				break;
+			}
 			default:
 				// A live shape must have a known geometry type. Fail loudly rather than emit a shape
 				// with no geometry that would silently lose its collision on restore.
@@ -754,6 +762,24 @@ static void b3DesShapes( b3SnapReader* r, b3World* world, b3RecReader* rdr )
 				dst->compound = (const b3CompoundData*)slot->live;
 				break;
 			}
+			case b3_voxelShape:
+			{
+				uint32_t gid = b3SnapR_U32( r );
+				b3SnapR_Bytes( r, &dst->voxels.scale, sizeof( float ) );
+				if ( !r->ok )
+				{
+					break;
+				}
+				if ( rdr == NULL || gid >= (uint32_t)rdr->slotCount )
+				{
+					r->ok = false;
+					break;
+				}
+				b3RegistrySlot* slot = rdr->slots + gid;
+				// Self-contained blob used by reference; point straight at the pristine bytes.
+				dst->voxels.data = (const b3VoxelData*)slot->bytes;
+				break;
+			}
 			default:
 				// Unknown geometry kind means a corrupt or unsupported snapshot. Fail the load instead
 				// of leaving a shape with no geometry.
@@ -876,6 +902,12 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 			dst->meshContact.triangleCache.count = 0;
 			dst->meshContact.triangleCache.capacity = 0;
 		}
+		else if ( dst->flags & b3_simVoxelContact )
+		{
+			dst->voxelContact.voxelCache.data = NULL;
+			dst->voxelContact.voxelCache.count = 0;
+			dst->voxelContact.voxelCache.capacity = 0;
+		}
 
 		bool isLive = ( dst->contactId == i );
 
@@ -920,6 +952,24 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 				}
 				b3Array_Resize( dst->meshContact.triangleCache, cacheCount );
 				b3SnapR_Bytes( r, dst->meshContact.triangleCache.data, cacheCount * (int)sizeof( b3TriangleCache ) );
+			}
+		}
+		else if ( isLive && ( dst->flags & b3_simVoxelContact ) )
+		{
+			int cacheCount = b3SnapR_I32( r );
+			if ( !r->ok )
+			{
+				break;
+			}
+			if ( cacheCount > 0 )
+			{
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( b3VoxelCache ), (int)sizeof( b3VoxelCache ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				b3Array_Resize( dst->voxelContact.voxelCache, cacheCount );
+				b3SnapR_Bytes( r, dst->voxelContact.voxelCache.data, cacheCount * (int)sizeof( b3VoxelCache ) );
 			}
 		}
 	}
