@@ -1025,7 +1025,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 		bestSepB = bestSepB * voxelsA.scale;
 
 		int preClipCount = context->pointCount;
-		float clipSep = FLT_MAX;
+		float clipSep = B3_HUGE;
 		if ( bestSepA > bestSepB )
 		{
 			// alternate axes for the current face normal
@@ -1422,9 +1422,8 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 			}
 		}
 
-		// attempt edge contact if no face clipping points survived, or if edge contact is better.
-		int outPoints = context->pointCount - preClipCount;
-		if ( bestEdgeIndexB != -1 && ( outPoints == 0 || bestSepE * voxelsA.scale > clipSep + edgeTolerance ) )
+		// attempt edge contact if it is better.
+		if ( bestEdgeIndexB != -1 && bestSepE * voxelsA.scale > clipSep + edgeTolerance )
 		{
 			const b3HullHalfEdge* edge = hullEdges + bestEdgeIndexB;
 			const b3HullHalfEdge* twin = hullEdges + edge->twin;
