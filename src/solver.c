@@ -1434,14 +1434,8 @@ static void b3BulletBodyTask( int startIndex, int endIndex, int workerIndex, voi
 	b3TracyCZoneEnd( bullet_body_task );
 }
 
-#if B3_SIMD_WIDTH == 4
-#define B3_SIMD_SHIFT 2
-#else
-#define B3_SIMD_SHIFT 0
-#endif
-
 // Solve with graph coloring
-void b3Solve( b3World* world, b3StepContext* stepContext )
+void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift )
 {
 	// Only count steps that advance the simulation
 	world->stepIndex += 1;
@@ -1526,8 +1520,7 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 			activeColorIndices[c] = i;
 
 			// Ceiling for wide constraint count
-			int colorWideConstraintCount =
-				colorConvexContactCount > 0 ? ( ( colorConvexContactCount - 1 ) >> B3_SIMD_SHIFT ) + 1 : 0;
+			int colorWideConstraintCount = colorConvexContactCount > 0 ? ( ( colorConvexContactCount - 1 ) >> simdShift ) + 1 : 0;
 			wideContactCount += colorWideConstraintCount;
 			colorWideContactCounts[c] = colorWideConstraintCount;
 
@@ -1561,9 +1554,9 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 		b3BlockDim meshPrepareDim = b3ComputeBlockCount( contactCount, minContactsPerBlock, maxBlockCount );
 		b3BlockDim jointPrepareDim = b3ComputeBlockCount( jointCount, minJointsPerBlock, maxBlockCount );
 
-		int wideContactByteCount = b3GetWideContactConstraintByteCount();
-		b3ContactConstraintWide* wideConstraints =
-			(b3ContactConstraintWide*)b3StackAlloc( &world->stack, wideContactCount * wideContactByteCount, "wide contacts" );
+		int wideContactByteCount = b3GetWideContactConstraintByteCountW4();
+		b3ContactConstraintW4* wideConstraints =
+			(b3ContactConstraintW4*)b3StackAlloc( &world->stack, wideContactCount * wideContactByteCount, "wide contacts" );
 		b3ContactConstraint* contactConstraints =
 			(b3ContactConstraint*)b3StackAlloc( &world->stack, contactCount * sizeof( b3ContactConstraint ), "contacts" );
 		b3ManifoldConstraint* manifoldConstraints = (b3ManifoldConstraint*)b3StackAlloc(
@@ -1614,9 +1607,9 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 				else
 				{
 					color->wideConstraints =
-						(b3ContactConstraintWide*)( (uint8_t*)wideConstraints + wideBase * wideContactByteCount );
+						(b3ContactConstraintW4*)( (uint8_t*)wideConstraints + wideBase * wideContactByteCount );
 
-					int colorContactCountW = ( ( colorConvexContactCount - 1 ) >> B3_SIMD_SHIFT ) + 1;
+					int colorContactCountW = ( ( colorConvexContactCount - 1 ) >> simdShift ) + 1;
 					color->wideConstraintCount = colorContactCountW;
 					wideBase += colorContactCountW;
 				}

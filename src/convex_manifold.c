@@ -1254,48 +1254,48 @@ static inline void b3NegativeTransformFromSoA( b3Matrix3* R, b3Vec3 p, const flo
 	B3_VALIDATE( ( (uintptr_t)outZ & 0xF ) == 0 );
 
 	// row-column
-	b3FloatW r00 = b3SplatW( R->cx.x );
-	b3FloatW r01 = b3SplatW( R->cy.x );
-	b3FloatW r02 = b3SplatW( R->cz.x );
-	b3FloatW r10 = b3SplatW( R->cx.y );
-	b3FloatW r11 = b3SplatW( R->cy.y );
-	b3FloatW r12 = b3SplatW( R->cz.y );
-	b3FloatW r20 = b3SplatW( R->cx.z );
-	b3FloatW r21 = b3SplatW( R->cy.z );
-	b3FloatW r22 = b3SplatW( R->cz.z );
+	b3FloatW4 r00 = b3SplatW4( R->cx.x );
+	b3FloatW4 r01 = b3SplatW4( R->cy.x );
+	b3FloatW4 r02 = b3SplatW4( R->cz.x );
+	b3FloatW4 r10 = b3SplatW4( R->cx.y );
+	b3FloatW4 r11 = b3SplatW4( R->cy.y );
+	b3FloatW4 r12 = b3SplatW4( R->cz.y );
+	b3FloatW4 r20 = b3SplatW4( R->cx.z );
+	b3FloatW4 r21 = b3SplatW4( R->cy.z );
+	b3FloatW4 r22 = b3SplatW4( R->cz.z );
 
-	b3FloatW tx = b3ZeroW();
-	b3FloatW ty = b3ZeroW();
-	b3FloatW tz = b3ZeroW();
+	b3FloatW4 tx = b3ZeroW4();
+	b3FloatW4 ty = b3ZeroW4();
+	b3FloatW4 tz = b3ZeroW4();
 
 	if ( isPoint )
 	{
-		tx = b3SplatW( p.x );
-		ty = b3SplatW( p.y );
-		tz = b3SplatW( p.z );
+		tx = b3SplatW4( p.x );
+		ty = b3SplatW4( p.y );
+		tz = b3SplatW4( p.z );
 	}
 
 	for ( int i = 0; i < n; i += 4 )
 	{
-		b3FloatW x = b3LoadW( inX + i );
-		b3FloatW y = b3LoadW( inY + i );
-		b3FloatW z = b3LoadW( inZ + i );
+		b3FloatW4 x = b3LoadW4( inX + i );
+		b3FloatW4 y = b3LoadW4( inY + i );
+		b3FloatW4 z = b3LoadW4( inZ + i );
 
 		// Rotate four vectors at a time
-		b3FloatW ox = b3Dot3W( r00, r01, r02, x, y, z );
-		b3FloatW oy = b3Dot3W( r10, r11, r12, x, y, z );
-		b3FloatW oz = b3Dot3W( r20, r21, r22, x, y, z );
+		b3FloatW4 ox = b3Dot3W4( r00, r01, r02, x, y, z );
+		b3FloatW4 oy = b3Dot3W4( r10, r11, r12, x, y, z );
+		b3FloatW4 oz = b3Dot3W4( r20, r21, r22, x, y, z );
 
 		if ( isPoint )
 		{
-			ox = b3AddW( ox, tx );
-			oy = b3AddW( oy, ty );
-			oz = b3AddW( oz, tz );
+			ox = b3AddW4( ox, tx );
+			oy = b3AddW4( oy, ty );
+			oz = b3AddW4( oz, tz );
 		}
 
-		b3StoreW( outX + i, b3NegW( ox ) );
-		b3StoreW( outY + i, b3NegW( oy ) );
-		b3StoreW( outZ + i, b3NegW( oz ) );
+		b3StoreW4( outX + i, b3NegW4( ox ) );
+		b3StoreW4( outY + i, b3NegW4( oy ) );
+		b3StoreW4( outZ + i, b3NegW4( oz ) );
 	}
 }
 
@@ -1319,30 +1319,30 @@ _Static_assert( B3_MAX_HULL_VERTICES == 128, "must be 128" );
 static inline void b3GetSupportWide( b3Vec3 normal, const float* vx, const float* vy, const float* vz, int n, float bias,
 									 float* support, int* vertexIndex )
 {
-	const b3FloatW nx = b3SplatW( normal.x );
-	const b3FloatW ny = b3SplatW( normal.y );
-	const b3FloatW nz = b3SplatW( normal.z );
-	const b3FloatW biasV = b3SplatW( bias );
+	const b3FloatW4 nx = b3SplatW4( normal.x );
+	const b3FloatW4 ny = b3SplatW4( normal.y );
+	const b3FloatW4 nz = b3SplatW4( normal.z );
+	const b3FloatW4 biasV = b3SplatW4( bias );
 
 	// Start the minimum at a large value.
-	b3FloatW minValue = b3SplatW( B3_HUGE );
+	b3FloatW4 minValue = b3SplatW4( B3_HUGE );
 
 	// Tail lanes hold vertex 0 with index bits >= vertexCount, so they never become the min value.
 	for ( int i = 0; i < n; i += 4 )
 	{
-		b3FloatW x = b3LoadW( vx + i );
-		b3FloatW y = b3LoadW( vy + i );
-		b3FloatW z = b3LoadW( vz + i );
-		b3FloatW d = b3AddW( b3MulW( nz, z ), b3AddW( b3MulW( ny, y ), b3MulW( nx, x ) ) );
+		b3FloatW4 x = b3LoadW4( vx + i );
+		b3FloatW4 y = b3LoadW4( vy + i );
+		b3FloatW4 z = b3LoadW4( vz + i );
+		b3FloatW4 d = b3AddW4( b3MulW4( nz, z ), b3AddW4( b3MulW4( ny, y ), b3MulW4( nx, x ) ) );
 
 		// This is always positive.
-		b3FloatW value = b3SubW( biasV, d );
-		b3FloatW augmentedValue = b3EmbedIndexW( value, i, B3_HULL_BIT_COUNT );
-		minValue = b3MinW( minValue, augmentedValue );
+		b3FloatW4 value = b3SubW4( biasV, d );
+		b3FloatW4 augmentedValue = b3EmbedIndexW4( value, i, B3_HULL_BIT_COUNT );
+		minValue = b3MinW4( minValue, augmentedValue );
 	}
 
 	// One horizontal min, the winning lane's value and index bits ride through.
-	int vi = b3MinIndexW( minValue, B3_HULL_BIT_COUNT );
+	int vi = b3MinIndexW4( minValue, B3_HULL_BIT_COUNT );
 
 	// Exact support for the chosen vertex.
 	*vertexIndex = vi;
@@ -1368,15 +1368,15 @@ static inline void b3GetFaceDots( const b3HullData* hull, b3Vec3 d, float* dots 
 	const float* ny = nx + soaFaceCount;
 	const float* nz = ny + soaFaceCount;
 
-	b3FloatW dx = b3SplatW( d.x );
-	b3FloatW dy = b3SplatW( d.y );
-	b3FloatW dz = b3SplatW( d.z );
+	b3FloatW4 dx = b3SplatW4( d.x );
+	b3FloatW4 dy = b3SplatW4( d.y );
+	b3FloatW4 dz = b3SplatW4( d.z );
 
 	for ( int i = 0; i < soaFaceCount; i += 4 )
 	{
 		// dot product per lane
-		b3FloatW m = b3Dot3W( b3LoadW( nx + i ), b3LoadW( ny + i ), b3LoadW( nz + i ), dx, dy, dz );
-		b3StoreW( dots + i, m );
+		b3FloatW4 m = b3Dot3W4( b3LoadW4( nx + i ), b3LoadW4( ny + i ), b3LoadW4( nz + i ), dx, dy, dz );
+		b3StoreW4( dots + i, m );
 	}
 }
 
@@ -1430,6 +1430,7 @@ static inline int b3ArcCanReach( float a, float b, float c, float length, float 
 }
 
 // Temporary abbreviations for convenience.
+#define B3_SIMD_WIDTH 4
 #define NE ( B3_MAX_HULL_EDGES + B3_SIMD_WIDTH )
 #define NF ( B3_MAX_HULL_FACES + B3_SIMD_WIDTH )
 #define NV ( B3_MAX_HULL_VERTICES + B3_SIMD_WIDTH )
@@ -1474,7 +1475,7 @@ b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* 
 	int faceCountA = hullA->faceCount;
 	const b3Plane* planesA = b3GetHullPlanes( hullA );
 
-	int soaVertexCountB = ( hullB->vertexCount + 3 ) & ~3;
+	int soaVertexCountB = ( hullB->vertexCount + B3_SIMD_WIDTH - 1 ) & ~( B3_SIMD_WIDTH - 1 );
 	const float* vxB = b3GetHullSoaVertices( hullB );
 	const float* vyB = vxB + soaVertexCountB;
 	const float* vzB = vyB + soaVertexCountB;
@@ -1775,20 +1776,20 @@ b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* 
 	}
 
 	// Zero the tail lanes.
-	b3FloatW zero = b3ZeroW();
-	b3StoreW( aN0x + na, zero );
-	b3StoreW( aN0y + na, zero );
-	b3StoreW( aN0z + na, zero );
-	b3StoreW( aN1x + na, zero );
-	b3StoreW( aN1y + na, zero );
-	b3StoreW( aN1z + na, zero );
-	b3StoreW( aDx + na, zero );
-	b3StoreW( aDy + na, zero );
-	b3StoreW( aDz + na, zero );
-	b3StoreW( aV0x + na, zero );
-	b3StoreW( aV0y + na, zero );
-	b3StoreW( aV0z + na, zero );
-	b3StoreW( aTol + na, zero );
+	b3FloatW4 zero = b3ZeroW4();
+	b3StoreW4( aN0x + na, zero );
+	b3StoreW4( aN0y + na, zero );
+	b3StoreW4( aN0z + na, zero );
+	b3StoreW4( aN1x + na, zero );
+	b3StoreW4( aN1y + na, zero );
+	b3StoreW4( aN1z + na, zero );
+	b3StoreW4( aDx + na, zero );
+	b3StoreW4( aDy + na, zero );
+	b3StoreW4( aDz + na, zero );
+	b3StoreW4( aV0x + na, zero );
+	b3StoreW4( aV0y + na, zero );
+	b3StoreW4( aV0z + na, zero );
+	b3StoreW4( aTol + na, zero );
 
 #if defined( B3_SIMD_NONE )
 
@@ -1878,112 +1879,112 @@ b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* 
 #else
 
 	// Edge phase, one B edge against four A edges at a time, no transforms in the loop.
-	const b3FloatW EPS = b3SplatW( -0.0001f );
-	const b3FloatW INF = b3SplatW( INFINITY );
+	const b3FloatW4 EPS = b3SplatW4( -0.0001f );
+	const b3FloatW4 INF = b3SplatW4( INFINITY );
 
 	for ( int j = 0; j < nb; ++j )
 	{
-		const b3FloatW Cx = b3SplatW( bCx[j] );
-		const b3FloatW Cy = b3SplatW( bCy[j] );
-		const b3FloatW Cz = b3SplatW( bCz[j] );
-		const b3FloatW Dx = b3SplatW( bDx[j] );
-		const b3FloatW Dy = b3SplatW( bDy[j] );
-		const b3FloatW Dz = b3SplatW( bDz[j] );
-		const b3FloatW DCx = b3SplatW( bDCx[j] );
-		const b3FloatW DCy = b3SplatW( bDCy[j] );
-		const b3FloatW DCz = b3SplatW( bDCz[j] );
-		const b3FloatW bv0x = b3SplatW( bV0x[j] );
-		const b3FloatW bv0y = b3SplatW( bV0y[j] );
-		const b3FloatW bv0z = b3SplatW( bV0z[j] );
+		const b3FloatW4 Cx = b3SplatW4( bCx[j] );
+		const b3FloatW4 Cy = b3SplatW4( bCy[j] );
+		const b3FloatW4 Cz = b3SplatW4( bCz[j] );
+		const b3FloatW4 Dx = b3SplatW4( bDx[j] );
+		const b3FloatW4 Dy = b3SplatW4( bDy[j] );
+		const b3FloatW4 Dz = b3SplatW4( bDz[j] );
+		const b3FloatW4 DCx = b3SplatW4( bDCx[j] );
+		const b3FloatW4 DCy = b3SplatW4( bDCy[j] );
+		const b3FloatW4 DCz = b3SplatW4( bDCz[j] );
+		const b3FloatW4 bv0x = b3SplatW4( bV0x[j] );
+		const b3FloatW4 bv0y = b3SplatW4( bV0y[j] );
+		const b3FloatW4 bv0z = b3SplatW4( bV0z[j] );
 
-		for ( int i = 0; i < na; i += 4 )
+		for ( int i = 0; i < na; i += B3_SIMD_WIDTH )
 		{
-			b3FloatW n0x = b3LoadW( aN0x + i );
-			b3FloatW n0y = b3LoadW( aN0y + i );
-			b3FloatW n0z = b3LoadW( aN0z + i );
-			b3FloatW n1x = b3LoadW( aN1x + i );
-			b3FloatW n1y = b3LoadW( aN1y + i );
-			b3FloatW n1z = b3LoadW( aN1z + i );
-			b3FloatW dx = b3LoadW( aDx + i );
-			b3FloatW dy = b3LoadW( aDy + i );
-			b3FloatW dz = b3LoadW( aDz + i );
-			b3FloatW v0x = b3LoadW( aV0x + i );
-			b3FloatW v0y = b3LoadW( aV0y + i );
-			b3FloatW v0z = b3LoadW( aV0z + i );
-			b3FloatW tol = b3LoadW( aTol + i );
+			b3FloatW4 n0x = b3LoadW4( aN0x + i );
+			b3FloatW4 n0y = b3LoadW4( aN0y + i );
+			b3FloatW4 n0z = b3LoadW4( aN0z + i );
+			b3FloatW4 n1x = b3LoadW4( aN1x + i );
+			b3FloatW4 n1y = b3LoadW4( aN1y + i );
+			b3FloatW4 n1z = b3LoadW4( aN1z + i );
+			b3FloatW4 dx = b3LoadW4( aDx + i );
+			b3FloatW4 dy = b3LoadW4( aDy + i );
+			b3FloatW4 dz = b3LoadW4( aDz + i );
+			b3FloatW4 v0x = b3LoadW4( aV0x + i );
+			b3FloatW4 v0y = b3LoadW4( aV0y + i );
+			b3FloatW4 v0z = b3LoadW4( aV0z + i );
+			b3FloatW4 tol = b3LoadW4( aTol + i );
 
 			// CBA = C.dir, DBA = D.dir, where dir = B_x_A
-			b3FloatW CBA = b3Dot3W( Cx, Cy, Cz, dx, dy, dz );
-			b3FloatW DBA = b3Dot3W( Dx, Dy, Dz, dx, dy, dz );
+			b3FloatW4 CBA = b3Dot3W4( Cx, Cy, Cz, dx, dy, dz );
+			b3FloatW4 DBA = b3Dot3W4( Dx, Dy, Dz, dx, dy, dz );
 			// ADC = n0.DC, BDC = n1.DC, where DC = D_x_C
-			b3FloatW ADC = b3Dot3W( n0x, n0y, n0z, DCx, DCy, DCz );
-			b3FloatW BDC = b3Dot3W( n1x, n1y, n1z, DCx, DCy, DCz );
+			b3FloatW4 ADC = b3Dot3W4( n0x, n0y, n0z, DCx, DCy, DCz );
+			b3FloatW4 BDC = b3Dot3W4( n1x, n1y, n1z, DCx, DCy, DCz );
 
 			// Gauss map arc crossing test, CBA*DBA<eps and ADC*BDC<eps and CBA*BDC<eps
-			b3FloatW m1 = b3LessThanW( b3MulW( CBA, DBA ), EPS );
-			b3FloatW m2 = b3LessThanW( b3MulW( ADC, BDC ), EPS );
-			b3FloatW m3 = b3LessThanW( b3MulW( CBA, BDC ), EPS );
+			b3FloatW4 m1 = b3LessThanW4( b3MulW4( CBA, DBA ), EPS );
+			b3FloatW4 m2 = b3LessThanW4( b3MulW4( ADC, BDC ), EPS );
+			b3FloatW4 m3 = b3LessThanW4( b3MulW4( CBA, BDC ), EPS );
 
 			// Reject near parallel edges. The arc lerp is ill conditioned when both of B's normals are nearly
 			// perpendicular to edge A, a scale invariant sine threshold relative to the edge length.
-			b3FloatW maxCD = b3MaxW( b3MulW( CBA, CBA ), b3MulW( DBA, DBA ) );
-			b3FloatW notParallel = b3GreaterThanW( maxCD, tol );
-			b3FloatW mask = b3AndW( b3AndW( m1, m2 ), b3AndW( m3, notParallel ) );
+			b3FloatW4 maxCD = b3MaxW4( b3MulW4( CBA, CBA ), b3MulW4( DBA, DBA ) );
+			b3FloatW4 notParallel = b3GreaterThanW4( maxCD, tol );
+			b3FloatW4 mask = b3AndW4( b3AndW4( m1, m2 ), b3AndW4( m3, notParallel ) );
 
 			// Most A-edges fail the Gauss test, so skip the divide, sqrt and support work when no
 			// lane passed.
-			if ( b3AnyTrueW( mask ) == false )
+			if ( b3AnyTrueW4( mask ) == false )
 			{
 				continue;
 			}
 
 			// t = -CBA / (DBA - CBA)
-			b3FloatW t = b3DivW( b3SubW( zero, CBA ), b3SubW( DBA, CBA ) );
+			b3FloatW4 t = b3DivW4( b3SubW4( zero, CBA ), b3SubW4( DBA, CBA ) );
 
 			// normal = lerp(t, C, D) = C + (D-C)*t
-			b3FloatW nx = b3MulAddW( Cx, t, b3SubW( Dx, Cx ) );
-			b3FloatW ny = b3MulAddW( Cy, t, b3SubW( Dy, Cy ) );
-			b3FloatW nz = b3MulAddW( Cz, t, b3SubW( Dz, Cz ) );
+			b3FloatW4 nx = b3MulAddW4( Cx, t, b3SubW4( Dx, Cx ) );
+			b3FloatW4 ny = b3MulAddW4( Cy, t, b3SubW4( Dy, Cy ) );
+			b3FloatW4 nz = b3MulAddW4( Cz, t, b3SubW4( Dz, Cz ) );
 
 			// normalize
-			b3FloatW len2 = b3Dot3W( nx, ny, nz, nx, ny, nz );
-			b3FloatW inv = b3DivW( b3SplatW( 1.0f ), b3SqrtW( len2 ) );
-			nx = b3MulW( nx, inv );
-			ny = b3MulW( ny, inv );
-			nz = b3MulW( nz, inv );
+			b3FloatW4 len2 = b3Dot3W4( nx, ny, nz, nx, ny, nz );
+			b3FloatW4 inv = b3DivW4( b3SplatW4( 1.0f ), b3SqrtW4( len2 ) );
+			nx = b3MulW4( nx, inv );
+			ny = b3MulW4( ny, inv );
+			nz = b3MulW4( nz, inv );
 
 			// support = dot(normal, av0 + bv0)
-			b3FloatW sx = b3AddW( v0x, bv0x );
-			b3FloatW sy = b3AddW( v0y, bv0y );
-			b3FloatW sz = b3AddW( v0z, bv0z );
-			b3FloatW support = b3Dot3W( sx, sy, sz, nx, ny, nz );
+			b3FloatW4 sx = b3AddW4( v0x, bv0x );
+			b3FloatW4 sy = b3AddW4( v0y, bv0y );
+			b3FloatW4 sz = b3AddW4( v0z, bv0z );
+			b3FloatW4 support = b3Dot3W4( sx, sy, sz, nx, ny, nz );
 
 			// Lanes that fail the Gauss test can never win.
-			support = b3BlendW( INF, support, mask );
-			b3FloatW separation = b3SubW( zero, support );
+			support = b3BlendW4( INF, support, mask );
+			b3FloatW4 separation = b3SubW4( zero, support );
 
-			// Test all 4 supports against the running best at once. If none beats it, skip the
+			// Test all B3_SIMD_WIDTH supports against the running best at once. If none beats it, skip the
 			// store and scalar reduction. res->support only turns negative just before returning,
 			// so this never skips a lane that would trigger the early out.
-			b3FloatW improves = b3GreaterThanW( separation, b3SplatW( res.edge.separation ) );
-			if ( b3AnyTrueW( improves ) == false )
+			b3FloatW4 improves = b3GreaterThanW4( separation, b3SplatW4( res.edge.separation ) );
+			if ( b3AnyTrueW4( improves ) == false )
 			{
 				continue;
 			}
 
-			_Alignas( 16 ) float sA[4];
-			_Alignas( 16 ) float nxA[4];
-			_Alignas( 16 ) float nyA[4];
-			_Alignas( 16 ) float nzA[4];
-			b3StoreW( sA, separation );
-			b3StoreW( nxA, nx );
-			b3StoreW( nyA, ny );
-			b3StoreW( nzA, nz );
+			_Alignas( 16 ) float sA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float nxA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float nyA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float nzA[B3_SIMD_WIDTH];
+			b3StoreW4( sA, separation );
+			b3StoreW4( nxA, nx );
+			b3StoreW4( nyA, ny );
+			b3StoreW4( nzA, nz );
 
 			// Reduce in lane order so ties keep the first edge and the early out takes the first
 			// improving support below zero. Padded tail lanes carry +INF support, so they never
 			// update or index a->edges out of range.
-			for ( int lane = 0; lane < 4; lane++ )
+			for ( int lane = 0; lane < B3_SIMD_WIDTH; lane++ )
 			{
 				int ei = i + lane;
 				float s = sA[lane];
@@ -2010,6 +2011,7 @@ b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* 
 	return res;
 }
 
+#undef B3_SIMD_WIDTH
 #undef NE
 #undef NF
 #undef NV

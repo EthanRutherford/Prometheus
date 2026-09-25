@@ -38,6 +38,8 @@ b3World b3_worlds[B3_MAX_WORLDS];
 b3AtomicInt b3_worldCount;
 int b3_maxWorldCount;
 
+int b3_SIMDShift = -1;
+
 const b3HullData* b3AddHullToDatabase( b3World* world, const b3HullData* src )
 {
 	b3HullMap* database = world->hullDatabase;
@@ -209,6 +211,14 @@ static void b3DestroyWorkerContexts( b3World* world )
 
 b3WorldId b3CreateWorld( const b3WorldDef* def )
 {
+	if ( b3_SIMDShift == -1 )
+	{
+		// it's fine that this might race on multiple threads, they'll all be racing to write the same value.
+		// worst case, the first few calls might do a tiny amount of redundant work.
+		// b3_SIMDShift = b3_GetSIMDWidth() == 4 ? 2 : 3; // Assuming SIMD width of 4 or 8, shift is log2(width)
+		b3_SIMDShift = 2;
+	}
+
 	B3_CHECK_DEF( def );
 
 	B3_ASSERT( B3_LINEAR_SLOP <= B3_MESH_REST_OFFSET );
@@ -1142,7 +1152,7 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 	if ( timeStep > 0.0f )
 	{
 		uint64_t solveTicks = b3GetTicks();
-		b3Solve( world, &context );
+		b3Solve( world, &context, b3_SIMDShift );
 		world->profile.solve = b3GetMilliseconds( solveTicks );
 	}
 

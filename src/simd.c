@@ -5,7 +5,7 @@
 
 #include "simd.h"
 
-#if defined( B3_SIMD_SSE2 )
+#if defined( B3_CPU_X86_X64 )
 
 #define B3_TRANSPOSE3( C1, C2, C3 )                                                                                              \
 	{                                                                                                                            \

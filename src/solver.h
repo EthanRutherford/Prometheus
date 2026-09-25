@@ -58,7 +58,7 @@
 typedef struct b3BodySim b3BodySim;
 typedef struct b3BodyState b3BodyState;
 typedef struct b3ContactConstraint b3ContactConstraint;
-typedef struct b3ContactConstraintWide b3ContactConstraintWide;
+typedef struct b3ContactConstraintW4 b3ContactConstraintW4;
 typedef struct b3ContactSpec b3ContactSpec;
 typedef struct b3JointSim b3JointSim;
 typedef struct b3Manifold b3Manifold;
@@ -218,7 +218,7 @@ typedef struct b3StepContext
 	// prepareSpans has activeColorCount + 1 entries, the last being a sentinel
 	// at wideContactCount. wideContactConstraints is the contiguous base
 	// pointer; per-color slices live at colors[i].wideConstraints.
-	struct b3ContactConstraintWide* wideConstraints;
+	struct b3ContactConstraintW4* wideConstraints;
 	b3WidePrepareSpan* widePrepareSpans;
 	int wideContactCount;
 
@@ -260,7 +260,7 @@ typedef struct b3StepContext
 	char padding3[64];
 } b3StepContext;
 
-void b3Solve( b3World* world, b3StepContext* stepContext );
+void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift );
 
 static inline b3Softness b3MakeSoft( float hertz, float zeta, float h )
 {

@@ -49,33 +49,46 @@
 // Define SIMD
 #if defined( BOX3D_DISABLE_SIMD )
 	#define B3_SIMD_NONE
-	#define B3_SIMD_WIDTH 4
+	#define B3_SIMD_HAS_WIDTH_4
 	//#pragma message("B3_SIMD_NONE")
 #else
 	#if defined( B3_CPU_X86_X64 )
 		#define B3_SIMD_SSE2
-		#define B3_SIMD_WIDTH 4
-		//#pragma message("B3_SIMD_SSE2")
+		#define B3_SIMD_HAS_WIDTH_4
+		#if defined( __AVX2__ ) || defined( BOX3D_FORCE_AVX2 )
+			// if AVX2 is specifically requested, compile with static AVX2 support
+			#define B3_SIMD_AVX2
+			#define B3_SIMD_HAS_WIDTH_8
+			//#pragma message("B3_SIMD_AVX2")
+		#elif !defined( BOX3D_FORCE_SSE2 )
+			// unless SSE2 is specifically forced, use dynamic dispatch for x86 SIMD
+			#define B3_SIMD_AVX2
+			#define B3_SIMD_HAS_WIDTH_8
+			#define B3_SIMD_X86_DYNAMIC_DISPATCH
+			//#pragma message("B3_SIMD_X86_DYNAMIC_DISPATCH")
+		#endif
 	#elif defined( B3_CPU_ARM )
 	// ARMv7 Neon doesn't have divide or sqrt so cannot be used.
 	#if defined( __aarch64__ ) || defined( _M_ARM64 )
 		#define B3_SIMD_NEON
+		#define B3_SIMD_HAS_WIDTH_4
 	#else
 		#define B3_SIMD_NONE
+		#define B3_SIMD_HAS_WIDTH_4
 	#endif
-		#define B3_SIMD_WIDTH 4
 		//#pragma message("B3_SIMD_NEON")
 	#elif defined( B3_CPU_WASM )
-		#define B3_CPU_WASM
 		#define B3_SIMD_SSE2
-		#define B3_SIMD_WIDTH 4
+		#define B3_SIMD_HAS_WIDTH_4
 		//#pragma message("B3_SIMD_SSE2")
 	#else
 		#define B3_SIMD_NONE
-		#define B3_SIMD_WIDTH 4
+		#define B3_SIMD_HAS_WIDTH_4
 		//#pragma message("B3_SIMD_NONE")
 	#endif
 #endif
+
+#define B3_SIMD_ENABLED ( !defined( B3_SIMD_NONE ) )
 
 // Define compiler
 #if defined( __clang__ )

@@ -1,6 +1,12 @@
 include(GNUInstallDirs)
 
 set(BOX3D_SOURCE_FILES
+	simd/avx2.h
+	simd/feature_detection.h
+	simd/neon.h
+	simd/none.h
+	simd/sse.h
+	simd/x86_common.h
 	aabb.c
 	aabb.h
 	algorithm.h
