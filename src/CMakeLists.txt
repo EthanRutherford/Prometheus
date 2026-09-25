@@ -231,6 +231,12 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/../include" PREFIX "include" FILE
 
 add_library(box3d::box3d ALIAS box3d)
 
+if(MSVC)
+    set_source_files_properties(contact_solver_w8.c PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+else()
+    set_source_files_properties(contact_solver_w8.c PROPERTIES COMPILE_OPTIONS "-mavx2")
+endif()
+
 # libm is required on many Unix toolchains for sqrtf, etc.
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   target_link_libraries(box3d PUBLIC m)
