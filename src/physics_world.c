@@ -215,8 +215,7 @@ b3WorldId b3CreateWorld( const b3WorldDef* def )
 	{
 		// it's fine that this might race on multiple threads, they'll all be racing to write the same value.
 		// worst case, the first few calls might do a tiny amount of redundant work.
-		// b3_SIMDShift = b3_GetSIMDWidth() == 4 ? 2 : 3; // Assuming SIMD width of 4 or 8, shift is log2(width)
-		b3_SIMDShift = 2;
+		b3_SIMDShift = b3_GetSIMDWidth() == 4 ? 2 : 3; // Assuming SIMD width of 4 or 8, shift is log2(width)
 	}
 
 	B3_CHECK_DEF( def );

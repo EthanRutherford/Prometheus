@@ -52,7 +52,7 @@ typedef struct b3ContactConstraint
 	int manifoldCount;
 } b3ContactConstraint;
 
-int b3GetWideContactConstraintByteCountW4( void );
+int b3GetWideContactConstraintByteCountW( void );
 
 // Overflow contacts don't fit into the constraint graph coloring
 void b3PrepareContacts_Overflow( b3StepContext* context );

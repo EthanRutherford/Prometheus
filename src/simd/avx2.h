@@ -206,23 +206,29 @@ static inline int b3MinIndexW8( b3FloatW8 a, int bitCount )
 B3_FORCE_INLINE void b3TransposeW8( b3FloatW8 r0, b3FloatW8 r1, b3FloatW8 r2, b3FloatW8 r3, b3FloatW8 r4, b3FloatW8 r5, b3FloatW8 r6, b3FloatW8 r7, b3FloatW8* c0,
 									   b3FloatW8* c1, b3FloatW8* c2, b3FloatW8* c3, b3FloatW8* c4, b3FloatW8* c5, b3FloatW8* c6, b3FloatW8* c7 )
 {
-	// I don't think the following code is correct.
+	b3FloatW8 t0 = _mm256_unpacklo_ps( r0, r1 );
+	b3FloatW8 t1 = _mm256_unpackhi_ps( r0, r1 );
+	b3FloatW8 t2 = _mm256_unpacklo_ps( r2, r3 );
+	b3FloatW8 t3 = _mm256_unpackhi_ps( r2, r3 );
+	b3FloatW8 t4 = _mm256_unpacklo_ps( r4, r5 );
+	b3FloatW8 t5 = _mm256_unpackhi_ps( r4, r5 );
+	b3FloatW8 t6 = _mm256_unpacklo_ps( r6, r7 );
+	b3FloatW8 t7 = _mm256_unpackhi_ps( r6, r7 );
+	b3FloatW8 tt0 = _mm256_shuffle_ps( t0, t2, _MM_SHUFFLE( 1, 0, 1, 0 ) );
+	b3FloatW8 tt1 = _mm256_shuffle_ps( t0, t2, _MM_SHUFFLE( 3, 2, 3, 2 ) );
+	b3FloatW8 tt2 = _mm256_shuffle_ps( t1, t3, _MM_SHUFFLE( 1, 0, 1, 0 ) );
+	b3FloatW8 tt3 = _mm256_shuffle_ps( t1, t3, _MM_SHUFFLE( 3, 2, 3, 2 ) );
+	b3FloatW8 tt4 = _mm256_shuffle_ps( t4, t6, _MM_SHUFFLE( 1, 0, 1, 0 ) );
+	b3FloatW8 tt5 = _mm256_shuffle_ps( t4, t6, _MM_SHUFFLE( 3, 2, 3, 2 ) );
+	b3FloatW8 tt6 = _mm256_shuffle_ps( t5, t7, _MM_SHUFFLE( 1, 0, 1, 0 ) );
+	b3FloatW8 tt7 = _mm256_shuffle_ps( t5, t7, _MM_SHUFFLE( 3, 2, 3, 2 ) );
 
-	b3FloatW8 t0 = b3UnpackLoW8( r0, r4 );
-	b3FloatW8 t1 = b3UnpackLoW8( r1, r5 );
-	b3FloatW8 t2 = b3UnpackLoW8( r2, r6 );
-	b3FloatW8 t3 = b3UnpackLoW8( r3, r7 );
-	b3FloatW8 t4 = b3UnpackHiW8( r0, r4 );
-	b3FloatW8 t5 = b3UnpackHiW8( r1, r5 );
-	b3FloatW8 t6 = b3UnpackHiW8( r2, r6 );
-	b3FloatW8 t7 = b3UnpackHiW8( r3, r7 );
-
-	*c0 = b3UnpackLoW8( t0, t1 );
-	*c1 = b3UnpackHiW8( t0, t1 );
-	*c2 = b3UnpackLoW8( t2, t3 );
-	*c3 = b3UnpackHiW8( t2, t3 );
-	*c4 = b3UnpackLoW8( t4, t5 );
-	*c5 = b3UnpackHiW8( t4, t5 );
-	*c6 = b3UnpackLoW8( t6, t7 );
-	*c7 = b3UnpackHiW8( t6, t7 );
+	*c0 = _mm256_permute2f128_ps( tt0, tt4, 0x20 );
+	*c1 = _mm256_permute2f128_ps( tt1, tt5, 0x20 );
+	*c2 = _mm256_permute2f128_ps( tt2, tt6, 0x20 );
+	*c3 = _mm256_permute2f128_ps( tt3, tt7, 0x20 );
+	*c4 = _mm256_permute2f128_ps( tt0, tt4, 0x31 );
+	*c5 = _mm256_permute2f128_ps( tt1, tt5, 0x31 );
+	*c6 = _mm256_permute2f128_ps( tt2, tt6, 0x31 );
+	*c7 = _mm256_permute2f128_ps( tt3, tt7, 0x31 );
 }

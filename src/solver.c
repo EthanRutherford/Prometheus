@@ -1554,9 +1554,8 @@ void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift )
 		b3BlockDim meshPrepareDim = b3ComputeBlockCount( contactCount, minContactsPerBlock, maxBlockCount );
 		b3BlockDim jointPrepareDim = b3ComputeBlockCount( jointCount, minJointsPerBlock, maxBlockCount );
 
-		int wideContactByteCount = b3GetWideContactConstraintByteCountW4();
-		b3ContactConstraintW4* wideConstraints =
-			(b3ContactConstraintW4*)b3StackAlloc( &world->stack, wideContactCount * wideContactByteCount, "wide contacts" );
+		int wideContactByteCount = b3GetWideContactConstraintByteCountW8();
+		void* wideConstraints = b3StackAlloc( &world->stack, wideContactCount * wideContactByteCount, "wide contacts" );
 		b3ContactConstraint* contactConstraints =
 			(b3ContactConstraint*)b3StackAlloc( &world->stack, contactCount * sizeof( b3ContactConstraint ), "contacts" );
 		b3ManifoldConstraint* manifoldConstraints = (b3ManifoldConstraint*)b3StackAlloc(
@@ -1606,8 +1605,7 @@ void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift )
 				}
 				else
 				{
-					color->wideConstraints =
-						(b3ContactConstraintW4*)( (uint8_t*)wideConstraints + wideBase * wideContactByteCount );
+					color->wideConstraints = ( (uint8_t*)wideConstraints + wideBase * wideContactByteCount );
 
 					int colorContactCountW = ( ( colorConvexContactCount - 1 ) >> simdShift ) + 1;
 					color->wideConstraintCount = colorContactCountW;

@@ -27,6 +27,9 @@ set(BOX3D_SOURCE_FILES
 	constraint_graph.h
 	contact.c
 	contact.h
+	contact_solver_w.h
+	contact_solver_w4.c
+	contact_solver_w8.c
 	contact_solver.c
 	contact_solver.h
 	container.h
