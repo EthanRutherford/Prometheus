@@ -9,26 +9,25 @@
 
 #include <stdbool.h>
 
-#if defined( B3_SIMD_X86_DYNAMIC_DISPATCH )
+#if defined( B3_SIMD_ENABLED )
 
-#include "simd/avx2.h"
-#include "simd/feature_detection.h"
-#include "simd/sse.h"
-#include "simd/x86_common.h"
-
-#elif defined( B3_SIMD_NEON )
-
+#if defined( B3_SIMD_NEON )
 #include "simd/neon.h"
+#endif
 
-#elif defined( B3_SIMD_SSE2 )
-
+#if defined( B3_SIMD_SSE2 )
 #include "simd/sse.h"
 #include "simd/x86_common.h"
+#endif
 
-#elif defined( B3_SIMD_AVX2 )
-
+#if defined( B3_SIMD_AVX2 )
 #include "simd/avx2.h"
 #include "simd/x86_common.h"
+#endif
+
+#if defined( B3_SIMD_DYNAMIC_DISPATCH )
+#include "simd/feature_detection.h"
+#endif
 
 #else
 
@@ -38,8 +37,8 @@
 
 static inline int b3_GetSIMDWidth()
 {
-#if defined( B3_SIMD_X86_DYNAMIC_DISPATCH )
-	return b3_supportsAVX2() ? 8 : 4;
+#if defined( B3_SIMD_DYNAMIC_DISPATCH )
+	return b3_supportsW8() ? 8 : 4;
 #elif defined( B3_SIMD_HAS_WIDTH_8 )
 	return 8;
 #elif defined( B3_SIMD_HAS_WIDTH_4 )

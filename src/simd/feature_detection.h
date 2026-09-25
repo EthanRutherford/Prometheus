@@ -45,15 +45,6 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #pragma once
 
-// on x86 systems we have two options for SIMD: SSE2 and AVX2
-// Haswell+ CPUs, which were first introduced in 2013, support AVX2 instructions.
-// The majority of CPUs on the market today should have AVX2 support, but there are still
-// some older CPUs which only support SSE2 instructions. For this reason, we use runtime hardware
-// feature detection to choose the appropriate SIMD instruction set at startup. This is only run
-// on x86 systems, and only when avx2 is not specifically requested by compiler flags.
-// NOTE: this file assumes it is only included on B3_SIMD_X86_DYNAMIC_DISPATCH builds, and does
-// not re-check the SIMD feature flags/macro definitions.
-
 #include <stdbool.h>
 #include <stdint.h>
 #if defined( _MSC_VER )
@@ -112,7 +103,7 @@ static inline uint64_t b3_xgetbv()
 #endif
 }
 
-static inline bool b3_supportsAVX2()
+static inline bool b3_supportsW8()
 {
 	uint32_t eax, ebx, ecx, edx;
 
@@ -138,5 +129,7 @@ static inline bool b3_supportsAVX2()
 	eax = 0x7;
 	ecx = 0x0;
 	b3_cpuid( &eax, &ebx, &ecx, &edx );
-	return ( ebx & b3_cpuid_avx2_bit ) != 0;
+	bool supportsAVX2 = ( ebx & b3_cpuid_avx2_bit ) != 0;
+
+	return supportsAVX2;
 }

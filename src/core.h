@@ -64,8 +64,8 @@
 			// unless SSE2 is specifically forced, use dynamic dispatch for x86 SIMD
 			#define B3_SIMD_AVX2
 			#define B3_SIMD_HAS_WIDTH_8
-			#define B3_SIMD_X86_DYNAMIC_DISPATCH
-			//#pragma message("B3_SIMD_X86_DYNAMIC_DISPATCH")
+			#define B3_SIMD_DYNAMIC_DISPATCH
+			//#pragma message("B3_SIMD_DYNAMIC_DISPATCH")
 		#endif
 	#elif defined( B3_CPU_ARM )
 	// ARMv7 Neon doesn't have divide or sqrt so cannot be used.
