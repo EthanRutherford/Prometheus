@@ -1140,7 +1140,7 @@ void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int wo
 {
 	b3StoreImpulses_ConvexW( block, context, workerIndex );
 }
-int b3GetWideContactConstraintByteCountW( void )
+int b3GetWideContactConstraintByteCount( void )
 {
 	if (wideContactConstraintByteCount == -1)
 	{
@@ -1183,7 +1183,7 @@ void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int wo
 	b3StoreImpulses_ConvexW8( block, context, workerIndex );
 }
 
-int b3GetWideContactConstraintByteCountW( void )
+int b3GetWideContactConstraintByteCount( void )
 {
 	return b3GetWideContactConstraintByteCountW8();
 }
@@ -1220,7 +1220,7 @@ void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int wo
 	b3StoreImpulses_ConvexW4( block, context, workerIndex );
 }
 
-int b3GetWideContactConstraintByteCountW( void )
+int b3GetWideContactConstraintByteCount( void )
 {
 	return b3GetWideContactConstraintByteCountW4();
 }

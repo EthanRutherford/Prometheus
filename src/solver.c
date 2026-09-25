@@ -1554,7 +1554,7 @@ void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift )
 		b3BlockDim meshPrepareDim = b3ComputeBlockCount( contactCount, minContactsPerBlock, maxBlockCount );
 		b3BlockDim jointPrepareDim = b3ComputeBlockCount( jointCount, minJointsPerBlock, maxBlockCount );
 
-		int wideContactByteCount = b3GetWideContactConstraintByteCountW8();
+		int wideContactByteCount = b3GetWideContactConstraintByteCount();
 		void* wideConstraints = b3StackAlloc( &world->stack, wideContactCount * wideContactByteCount, "wide contacts" );
 		b3ContactConstraint* contactConstraints =
 			(b3ContactConstraint*)b3StackAlloc( &world->stack, contactCount * sizeof( b3ContactConstraint ), "contacts" );
