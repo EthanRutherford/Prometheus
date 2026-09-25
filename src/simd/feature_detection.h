@@ -64,6 +64,8 @@ extern int __stdcall IsProcessorFeaturePresent( unsigned long ProcessorFeature )
 #include <stdfil.h>
 #endif
 
+#if defined( __x86_64__ ) || defined( _M_AMD64 )
+
 static const uint32_t b3_cpuid_avx2_bit = 1 << 5;
 static const uint64_t b3_cpuid_avx256_saved = ( (uint64_t)1 ) << 2;
 static const uint32_t b3_cpuid_osxsave = ( ( (uint32_t)1 ) << 26 ) | ( ( (uint32_t)1 ) << 27 );
@@ -133,3 +135,12 @@ static inline bool b3_supportsW8()
 
 	return supportsAVX2;
 }
+
+#else
+
+static inline bool b3_supportsW8()
+{
+	return false;
+}
+
+#endif

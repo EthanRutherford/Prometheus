@@ -1150,6 +1150,7 @@ int b3GetWideContactConstraintByteCount( void )
 	return wideContactConstraintByteCount;
 }
 
+#undef B3_SIMD_DISPATCH
 
 #elif defined( B3_SIMD_HAS_WIDTH_8 )
 
