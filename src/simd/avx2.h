@@ -55,8 +55,7 @@ static inline b3FloatW8 b3NegW8( b3FloatW8 a )
 
 static inline b3FloatW8 b3AbsW8( b3FloatW8 a )
 {
-	__m256 mask = _mm256_set1_ps( -0.0f );
-	return _mm256_andnot_ps( mask, a );
+	return _mm256_andnot_ps( _mm256_set1_ps( -0.0f ), a );
 }
 
 static inline b3FloatW8 b3AddW8( b3FloatW8 a, b3FloatW8 b )
@@ -165,8 +164,8 @@ static inline bool b3AllZeroW8( b3FloatW8 a )
 	// Create a mask from the comparison results
 	int mask = _mm256_movemask_ps( cmp );
 
-	// If all elements are zero, the mask will be 0xF (1111 in binary)
-	return mask == 0xF;
+	// If all elements are zero, the mask will be 0xFF (11111111 in binary)
+	return mask == 0xFF;
 }
 
 static inline bool b3AnyTrueW8( b3FloatW8 mask )
@@ -203,8 +202,9 @@ static inline int b3MinIndexW8( b3FloatW8 a, int bitCount )
 	return _mm256_cvtsi256_si32( _mm256_castps_si256( a ) ) & ( ( 1 << bitCount ) - 1 );
 }
 
-B3_FORCE_INLINE void b3TransposeW8( b3FloatW8 r0, b3FloatW8 r1, b3FloatW8 r2, b3FloatW8 r3, b3FloatW8 r4, b3FloatW8 r5, b3FloatW8 r6, b3FloatW8 r7, b3FloatW8* c0,
-									   b3FloatW8* c1, b3FloatW8* c2, b3FloatW8* c3, b3FloatW8* c4, b3FloatW8* c5, b3FloatW8* c6, b3FloatW8* c7 )
+B3_FORCE_INLINE void b3TransposeW8( b3FloatW8 r0, b3FloatW8 r1, b3FloatW8 r2, b3FloatW8 r3, b3FloatW8 r4, b3FloatW8 r5,
+									b3FloatW8 r6, b3FloatW8 r7, b3FloatW8* c0, b3FloatW8* c1, b3FloatW8* c2, b3FloatW8* c3,
+									b3FloatW8* c4, b3FloatW8* c5, b3FloatW8* c6, b3FloatW8* c7 )
 {
 	b3FloatW8 t0 = _mm256_unpacklo_ps( r0, r1 );
 	b3FloatW8 t1 = _mm256_unpackhi_ps( r0, r1 );

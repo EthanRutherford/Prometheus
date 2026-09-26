@@ -751,7 +751,9 @@ void b3WarmStartContacts_ConvexW8( b3SolverBlock block, b3StepContext* context )
 
 		int pointCount1 = b3MaxInt( c->pointCounts[0], c->pointCounts[1] );
 		int pointCount2 = b3MaxInt( c->pointCounts[2], c->pointCounts[3] );
-		int pointCount = b3MaxInt( pointCount1, pointCount2 );
+		int pointCount3 = b3MaxInt( c->pointCounts[4], c->pointCounts[5] );
+		int pointCount4 = b3MaxInt( c->pointCounts[6], c->pointCounts[7] );
+		int pointCount = b3MaxInt( b3MaxInt( pointCount1, pointCount2 ), b3MaxInt( pointCount3, pointCount4 ) );
 		B3_VALIDATE( 0 < pointCount && pointCount <= B3_MAX_MANIFOLD_POINTS );
 
 		b3FloatW8 zeroW = b3ZeroW8();
@@ -824,7 +826,9 @@ void b3PushContacts_ConvexW8( b3SolverBlock block, b3StepContext* context )
 
 		int pointCount1 = b3MaxInt( c->pointCounts[0], c->pointCounts[1] );
 		int pointCount2 = b3MaxInt( c->pointCounts[2], c->pointCounts[3] );
-		int pointCount = b3MaxInt( pointCount1, pointCount2 );
+		int pointCount3 = b3MaxInt( c->pointCounts[4], c->pointCounts[5] );
+		int pointCount4 = b3MaxInt( c->pointCounts[6], c->pointCounts[7] );
+		int pointCount = b3MaxInt( b3MaxInt( pointCount1, pointCount2 ), b3MaxInt( pointCount3, pointCount4 ) );
 		B3_VALIDATE( 0 < pointCount && pointCount <= B3_MAX_MANIFOLD_POINTS );
 
 		b3BodyStateW8 bA = b3GatherBodiesW8( states, c->indexA );
@@ -912,7 +916,9 @@ void b3SolveContacts_ConvexW8( b3SolverBlock block, b3StepContext* context )
 
 		int pointCount1 = b3MaxInt( c->pointCounts[0], c->pointCounts[1] );
 		int pointCount2 = b3MaxInt( c->pointCounts[2], c->pointCounts[3] );
-		int pointCount = b3MaxInt( pointCount1, pointCount2 );
+		int pointCount3 = b3MaxInt( c->pointCounts[4], c->pointCounts[5] );
+		int pointCount4 = b3MaxInt( c->pointCounts[6], c->pointCounts[7] );
+		int pointCount = b3MaxInt( b3MaxInt( pointCount1, pointCount2 ), b3MaxInt( pointCount3, pointCount4 ) );
 		B3_VALIDATE( 0 < pointCount && pointCount <= B3_MAX_MANIFOLD_POINTS );
 
 		b3BodyStateW8 bA = b3GatherBodiesW8( states, c->indexA );
@@ -1096,7 +1102,9 @@ void b3ApplyRestitution_ConvexW8( b3SolverBlock block, b3StepContext* context )
 
 		int pointCount1 = b3MaxInt( c->pointCounts[0], c->pointCounts[1] );
 		int pointCount2 = b3MaxInt( c->pointCounts[2], c->pointCounts[3] );
-		int pointCount = b3MaxInt( pointCount1, pointCount2 );
+		int pointCount3 = b3MaxInt( c->pointCounts[4], c->pointCounts[5] );
+		int pointCount4 = b3MaxInt( c->pointCounts[6], c->pointCounts[7] );
+		int pointCount = b3MaxInt( b3MaxInt( pointCount1, pointCount2 ), b3MaxInt( pointCount3, pointCount4 ) );
 		B3_VALIDATE( 0 < pointCount && pointCount <= B3_MAX_MANIFOLD_POINTS );
 
 		b3BodyStateW8 bA = b3GatherBodiesW8( states, c->indexA );
