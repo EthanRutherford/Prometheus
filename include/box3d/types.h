@@ -2099,9 +2099,9 @@ typedef struct b3BoxHull
 	float vx[8];				 ///< vertex x
 	float vy[8];				 ///< vertex y
 	float vz[8];				 ///< vertex z
-	float nx[8];				 ///< normal x, padded to multiple of 4
-	float ny[8];				 ///< normal y, padded to multiple of 4
-	float nz[8];				 ///< normal z, padded to multiple of 4
+	float nx[8];				 ///< normal x, padded to multiple of 8
+	float ny[8];				 ///< normal y, padded to multiple of 8
+	float nz[8];				 ///< normal z, padded to multiple of 8
 } b3BoxHull;
 
 /**@}*/ // hull

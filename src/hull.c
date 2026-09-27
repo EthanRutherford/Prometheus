@@ -1636,7 +1636,7 @@ int b3FindHullSupportVertex( const b3HullData* hull, b3Vec3 direction )
 	int vertexCount = hull->vertexCount;
 	const float* vx = b3GetHullSoaVertices( hull );
 
-	int soaVertexCount = ( vertexCount + 3 ) & ~3;
+	int soaVertexCount = ( vertexCount + 7 ) & ~7;
 	const float* vy = vx + soaVertexCount;
 	const float* vz = vy + soaVertexCount;
 
@@ -2160,8 +2160,8 @@ b3HullData* b3CreateHull( const b3Vec3* points, int pointCount, int maxVertexCou
 		while ( edge != face->edge );
 	}
 
-	int soaVertexCount = ( vertexCount + 3 ) & ~3;
-	int soaNormalCount = ( faceCount + 3 ) & ~3;
+	int soaVertexCount = ( vertexCount + 7 ) & ~7;
+	int soaNormalCount = ( faceCount + 7 ) & ~7;
 
 	// Allocate the hull. Arrays hang off the end.
 	size_t byteCount = b3AlignUp8( sizeof( b3HullData ) );

@@ -1,5 +1,5 @@
 #include "body.h"
-#include "contact_solver_w.h"
+#include "contact_solver.h"
 #include "platform.h"
 #include "simd.h"
 

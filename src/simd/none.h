@@ -204,16 +204,6 @@ static inline void b3StoreW4( float* data, b3FloatW4 a )
 	data[3] = a.w;
 }
 
-static inline b3FloatW4 b3UnpackLoW4( b3FloatW4 a, b3FloatW4 b )
-{
-	return (b3FloatW4){ a.x, b.x, a.y, b.y };
-}
-
-static inline b3FloatW4 b3UnpackHiW4( b3FloatW4 a, b3FloatW4 b )
-{
-	return (b3FloatW4){ a.z, b.z, a.w, b.w };
-}
-
 static inline b3FloatW4 b3NegW4( b3FloatW4 a )
 {
 	return (b3FloatW4){ -a.x, -a.y, -a.z, -a.w };
@@ -466,12 +456,12 @@ B3_FORCE_INLINE void b3StoreAABBV4( b3AABB* aabb, b3AABBV4 value, bool condition
 B3_FORCE_INLINE void b3TransposeW4( b3FloatW4 r0, b3FloatW4 r1, b3FloatW4 r2, b3FloatW4 r3, b3FloatW4* c0,
 										b3FloatW4* c1, b3FloatW4* c2, b3FloatW4* c3 )
 {
-	b3FloatW4 t0 = b3UnpackLoW4( r0, r2 );
-	b3FloatW4 t1 = b3UnpackLoW4( r1, r3 );
-	b3FloatW4 t2 = b3UnpackHiW4( r0, r2 );
-	b3FloatW4 t3 = b3UnpackHiW4( r1, r3 );
-	*c0 = b3UnpackLoW4( t0, t1 );
-	*c1 = b3UnpackHiW4( t0, t1 );
-	*c2 = b3UnpackLoW4( t2, t3 );
-	*c3 = b3UnpackHiW4( t2, t3 );
+	b3FloatW4 t0 = (b3FloatW4){ r0.x, r2.x, r0.y, r2.y };
+	b3FloatW4 t1 = (b3FloatW4){ r1.x, r3.x, r1.y, r3.y };
+	b3FloatW4 t2 = (b3FloatW4){ r0.z, r2.z, r0.w, r2.w };
+	b3FloatW4 t3 = (b3FloatW4){ r1.z, r3.z, r1.w, r3.w };
+	*c0 = (b3FloatW4){ t0.x, t1.x, t0.y, t1.y };
+	*c1 = (b3FloatW4){ t0.z, t1.z, t0.w, t1.w };
+	*c2 = (b3FloatW4){ t2.x, t3.x, t2.y, t3.y };
+	*c3 = (b3FloatW4){ t2.z, t3.z, t2.w, t3.w };
 }

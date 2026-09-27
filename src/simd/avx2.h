@@ -34,16 +34,6 @@ static inline void b3StoreW8( float* data, b3FloatW8 a )
 	_mm256_storeu_ps( data, a );
 }
 
-static inline b3FloatW8 b3UnpackLoW8( b3FloatW8 a, b3FloatW8 b )
-{
-	return _mm256_unpacklo_ps( a, b );
-}
-
-static inline b3FloatW8 b3UnpackHiW8( b3FloatW8 a, b3FloatW8 b )
-{
-	return _mm256_unpackhi_ps( a, b );
-}
-
 static inline b3FloatW8 b3NegW8( b3FloatW8 a )
 {
 	// Create a mask with the sign bit set for each element
@@ -197,9 +187,10 @@ static inline b3FloatW8 b3EmbedIndexW8( b3FloatW8 value, int baseIndex, int bitC
 // Recovers the index embedded by b3EmbedIndexW8 from the lane holding the minimum.
 static inline int b3MinIndexW8( b3FloatW8 a, int bitCount )
 {
-	a = _mm256_min_ps( a, _mm256_permute_ps( a, _MM_SHUFFLE( 2, 3, 0, 1 ) ) );
-	a = _mm256_min_ps( a, _mm256_permute_ps( a, _MM_SHUFFLE( 1, 0, 3, 2 ) ) );
-	return _mm256_cvtsi256_si32( _mm256_castps_si256( a ) ) & ( ( 1 << bitCount ) - 1 );
+	__m128 min = _mm_min_ps( _mm256_castps256_ps128( a ), _mm256_extractf128_ps( a, 1 ) );
+	min = _mm_min_ps( _mm_shuffle_ps( min, min, _MM_SHUFFLE( 2, 3, 0, 1 ) ), min );
+	min = _mm_min_ps( _mm_shuffle_ps( min, min, _MM_SHUFFLE( 1, 0, 3, 2 ) ), min );
+	return _mm_cvtsi128_si32( _mm_castps_si128( min ) ) & ( ( 1 << bitCount ) - 1 );
 }
 
 B3_FORCE_INLINE void b3TransposeW8( b3FloatW8 r0, b3FloatW8 r1, b3FloatW8 r2, b3FloatW8 r3, b3FloatW8 r4, b3FloatW8 r5,

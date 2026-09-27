@@ -1,5 +1,5 @@
 #include "body.h"
-#include "contact_solver_w.h"
+#include "contact_solver.h"
 #include "platform.h"
 #include "simd.h"
 
@@ -377,8 +377,8 @@ static inline b3SymMatrix3W8 b3GatherInvInertiaW8( const b3BodySim* const* simLa
 
 	b3SymMatrix3W8 m;
 	b3FloatW8 unused;
-	b3TransposeW8( b3LoadW8( i0 ), b3LoadW8( i1 ), b3LoadW8( i2 ), b3LoadW8( i3 ), b3LoadW8( i4 ), b3LoadW8( i5 ), b3LoadW8( i6 ), b3LoadW8( i7 ),
-				   &m.cxx, &m.cxy, &m.cxz, &unused, &m.cyy, &m.cyz, &unused, &unused );
+	b3TransposeW8( b3LoadW8( i0 ), b3LoadW8( i1 ), b3LoadW8( i2 ), b3LoadW8( i3 ), b3LoadW8( i4 ), b3LoadW8( i5 ), b3LoadW8( i6 ),
+				   b3LoadW8( i7 ), &m.cxx, &m.cxy, &m.cxz, &unused, &m.cyy, &m.cyz, &unused, &unused );
 	m.czz = b3SetW8( i0[8], i1[8], i2[8], i3[8], i4[8], i5[8], i6[8], i7[8] );
 	return m;
 }

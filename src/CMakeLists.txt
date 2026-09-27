@@ -27,13 +27,15 @@ set(BOX3D_SOURCE_FILES
 	constraint_graph.h
 	contact.c
 	contact.h
-	contact_solver_w.h
 	contact_solver_w4.c
 	contact_solver_w8.c
 	contact_solver.c
 	contact_solver.h
 	container.h
+	convex_manifold_w4.c
+	convex_manifold_w8.c
 	convex_manifold.c
+	convex_manifold.h
 	core.c
 	core.h
 	ctz.h
@@ -112,6 +114,11 @@ set(BOX3D_INCLUDE_FILES
 	../include/box3d/id.h
 	../include/box3d/math_functions.h
 	../include/box3d/types.h
+)
+
+set(BOX3D_AVX2_SOURCE_FILES
+	contact_solver_w8.c
+	convex_manifold_w8.c
 )
 
 # Hide internal functions
@@ -232,9 +239,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/../include" PREFIX "include" FILE
 add_library(box3d::box3d ALIAS box3d)
 
 if(MSVC)
-    set_source_files_properties(contact_solver_w8.c PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+    set_source_files_properties(${BOX3D_AVX2_SOURCE_FILES} PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
 else()
-    set_source_files_properties(contact_solver_w8.c PROPERTIES COMPILE_OPTIONS "-mavx2")
+    set_source_files_properties(${BOX3D_AVX2_SOURCE_FILES} PROPERTIES COMPILE_OPTIONS "-mavx2")
 endif()
 
 # libm is required on many Unix toolchains for sqrtf, etc.

@@ -202,16 +202,6 @@ static inline void b3StoreW4( float* data, b3FloatW4 a )
 	vst1q_f32( data, a );
 }
 
-static inline b3FloatW4 b3UnpackLoW4( b3FloatW4 a, b3FloatW4 b )
-{
-	return vzip1q_f32( a, b );
-}
-
-static inline b3FloatW4 b3UnpackHiW4( b3FloatW4 a, b3FloatW4 b )
-{
-	return vzip2q_f32( a, b );
-}
-
 static inline b3FloatW4 b3NegW4( b3FloatW4 a )
 {
 	return vnegq_f32( a );
@@ -434,12 +424,12 @@ B3_FORCE_INLINE void b3StoreAABBV4( b3AABB* aabb, b3AABBV4 value, bool condition
 B3_FORCE_INLINE void b3TransposeW4( b3FloatW4 r0, b3FloatW4 r1, b3FloatW4 r2, b3FloatW4 r3, b3FloatW4* c0,
 								   b3FloatW4* c1, b3FloatW4* c2, b3FloatW4* c3 )
 {
-	b3FloatW4 t0 = b3UnpackLoW4( r0, r2 );
-	b3FloatW4 t1 = b3UnpackLoW4( r1, r3 );
-	b3FloatW4 t2 = b3UnpackHiW4( r0, r2 );
-	b3FloatW4 t3 = b3UnpackHiW4( r1, r3 );
-	*c0 = b3UnpackLoW4( t0, t1 );
-	*c1 = b3UnpackHiW4( t0, t1 );
-	*c2 = b3UnpackLoW4( t2, t3 );
-	*c3 = b3UnpackHiW4( t2, t3 );
+	b3FloatW4 t0 = vzip1q_f32( r0, r2 );
+	b3FloatW4 t1 = vzip1q_f32( r1, r3 );
+	b3FloatW4 t2 = vzip2q_f32( r0, r2 );
+	b3FloatW4 t3 = vzip2q_f32( r1, r3 );
+	*c0 = vzip1q_f32( t0, t1 );
+	*c1 = vzip2q_f32( t0, t1 );
+	*c2 = vzip1q_f32( t2, t3 );
+	*c3 = vzip2q_f32( t2, t3 );
 }

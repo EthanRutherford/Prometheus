@@ -6,7 +6,6 @@
 #include "body.h"
 #include "constraint_graph.h"
 #include "contact.h"
-#include "contact_solver_w.h"
 #include "core.h"
 #include "math_internal.h"
 #include "physics_world.h"
@@ -1142,9 +1141,10 @@ void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int wo
 }
 int b3GetWideContactConstraintByteCount( void )
 {
-	if (wideContactConstraintByteCount == -1)
+	if ( wideContactConstraintByteCount == -1 )
 	{
-		wideContactConstraintByteCount = b3_supportsW8() ? b3GetWideContactConstraintByteCountW8() : b3GetWideContactConstraintByteCountW4();
+		wideContactConstraintByteCount =
+			b3_supportsW8() ? b3GetWideContactConstraintByteCountW8() : b3GetWideContactConstraintByteCountW4();
 	}
 
 	return wideContactConstraintByteCount;

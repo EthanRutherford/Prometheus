@@ -34,16 +34,6 @@ static inline void b3StoreW4( float* data, b3FloatW4 a )
 	_mm_storeu_ps( data, a );
 }
 
-static inline b3FloatW4 b3UnpackLoW4( b3FloatW4 a, b3FloatW4 b )
-{
-	return _mm_unpacklo_ps( a, b );
-}
-
-static inline b3FloatW4 b3UnpackHiW4( b3FloatW4 a, b3FloatW4 b )
-{
-	return _mm_unpackhi_ps( a, b );
-}
-
 static inline b3FloatW4 b3NegW4( b3FloatW4 a )
 {
 	// Create a mask with the sign bit set for each element
@@ -206,12 +196,12 @@ static inline int b3MinIndexW4( b3FloatW4 a, int bitCount )
 B3_FORCE_INLINE void b3TransposeW4( b3FloatW4 r0, b3FloatW4 r1, b3FloatW4 r2, b3FloatW4 r3, b3FloatW4* c0,
 									   b3FloatW4* c1, b3FloatW4* c2, b3FloatW4* c3 )
 {
-	b3FloatW4 t0 = b3UnpackLoW4( r0, r2 );
-	b3FloatW4 t1 = b3UnpackLoW4( r1, r3 );
-	b3FloatW4 t2 = b3UnpackHiW4( r0, r2 );
-	b3FloatW4 t3 = b3UnpackHiW4( r1, r3 );
-	*c0 = b3UnpackLoW4( t0, t1 );
-	*c1 = b3UnpackHiW4( t0, t1 );
-	*c2 = b3UnpackLoW4( t2, t3 );
-	*c3 = b3UnpackHiW4( t2, t3 );
+	b3FloatW4 t0 = _mm_unpacklo_ps( r0, r2 );
+	b3FloatW4 t1 = _mm_unpacklo_ps( r1, r3 );
+	b3FloatW4 t2 = _mm_unpackhi_ps( r0, r2 );
+	b3FloatW4 t3 = _mm_unpackhi_ps( r1, r3 );
+	*c0 = _mm_unpacklo_ps( t0, t1 );
+	*c1 = _mm_unpackhi_ps( t0, t1 );
+	*c2 = _mm_unpacklo_ps( t2, t3 );
+	*c3 = _mm_unpackhi_ps( t2, t3 );
 }
