@@ -12,12 +12,6 @@ typedef struct b3Vec2W4
 	b3FloatW4 x, y;
 } b3Vec2W4;
 
-// Wide vec3
-typedef struct b3Vec3W4
-{
-	b3FloatW4 X, Y, Z;
-} b3Vec3W4;
-
 // Wide quaternion
 typedef struct b3QuatW4
 {
@@ -42,50 +36,12 @@ typedef struct b3Matrix3W4
 	b3Vec3W4 cx, cy, cz;
 } b3Matrix3W4;
 
-// s * a
-static inline b3Vec3W4 b3MulSVW4( b3FloatW4 s, b3Vec3W4 a )
-{
-	return (b3Vec3W4){ b3MulW4( s, a.X ), b3MulW4( s, a.Y ), b3MulW4( s, a.Z ) };
-}
-
-// a - s * b
-static inline b3Vec3W4 b3MulSubSVW4( b3Vec3W4 a, b3FloatW4 s, b3Vec3W4 b )
-{
-	return (b3Vec3W4){ b3SubW4( a.X, b3MulW4( s, b.X ) ), b3SubW4( a.Y, b3MulW4( s, b.Y ) ), b3SubW4( a.Z, b3MulW4( s, b.Z ) ) };
-}
-
-// a + s * b
-static inline b3Vec3W4 b3MulAddSVW4( b3Vec3W4 a, b3FloatW4 s, b3Vec3W4 b )
-{
-	return (b3Vec3W4){ b3AddW4( a.X, b3MulW4( s, b.X ) ), b3AddW4( a.Y, b3MulW4( s, b.Y ) ), b3AddW4( a.Z, b3MulW4( s, b.Z ) ) };
-}
-
 // a + b
 static inline b3Vec2W4 b3AddV2W4( b3Vec2W4 a, b3Vec2W4 b )
 {
 	return (b3Vec2W4){
 		b3AddW4( a.x, b.x ),
 		b3AddW4( a.y, b.y ),
-	};
-}
-
-// a - b
-static inline b3Vec3W4 b3SubVW4( b3Vec3W4 a, b3Vec3W4 b )
-{
-	return (b3Vec3W4){
-		b3SubW4( a.X, b.X ),
-		b3SubW4( a.Y, b.Y ),
-		b3SubW4( a.Z, b.Z ),
-	};
-}
-
-// a + b
-static inline b3Vec3W4 b3AddVW4( b3Vec3W4 a, b3Vec3W4 b )
-{
-	return (b3Vec3W4){
-		b3AddW4( a.X, b.X ),
-		b3AddW4( a.Y, b.Y ),
-		b3AddW4( a.Z, b.Z ),
 	};
 }
 
@@ -134,20 +90,6 @@ static inline b3Vec3W4 b3MulAddMVW4( b3Vec3W4 a, b3SymMatrix3W4 m, b3Vec3W4 b )
 	};
 
 	return (b3Vec3W4){ b3AddW4( a.X, c.X ), b3AddW4( a.Y, c.Y ), b3AddW4( a.Z, c.Z ) };
-}
-
-static inline b3FloatW4 b3DotW4( b3Vec3W4 a, b3Vec3W4 b )
-{
-	return b3AddW4( b3AddW4( b3MulW4( a.X, b.X ), b3MulW4( a.Y, b.Y ) ), b3MulW4( a.Z, b.Z ) );
-}
-
-static inline b3Vec3W4 b3CrossW4( b3Vec3W4 a, b3Vec3W4 b )
-{
-	b3Vec3W4 c;
-	c.X = b3SubW4( b3MulW4( a.Y, b.Z ), b3MulW4( a.Z, b.Y ) );
-	c.Y = b3SubW4( b3MulW4( a.Z, b.X ), b3MulW4( a.X, b.Z ) );
-	c.Z = b3SubW4( b3MulW4( a.X, b.Y ), b3MulW4( a.Y, b.X ) );
-	return c;
 }
 
 static inline b3Matrix3W4 b3MakeMatrixFromQuatW4( b3QuatW4 q )

@@ -169,12 +169,6 @@ static inline b3FloatW4 b3BlendW4( b3FloatW4 a, b3FloatW4 b, b3FloatW4 mask )
 	return _mm_or_ps( _mm_and_ps( mask, b ), _mm_andnot_ps( mask, a ) );
 }
 
-static inline b3FloatW4 b3Dot3W4( b3FloatW4 ax, b3FloatW4 ay, b3FloatW4 az, b3FloatW4 bx, b3FloatW4 by,
-										b3FloatW4 bz )
-{
-	return _mm_add_ps( _mm_mul_ps( ax, bx ), _mm_add_ps( _mm_mul_ps( ay, by ), _mm_mul_ps( az, bz ) ) );
-}
-
 // Replace the low bitCount mantissa bits of each lane with baseIndex + lane. The value must be
 // positive so the embedded index sorts with the value, and ties fall to the lower index.
 static inline b3FloatW4 b3EmbedIndexW4( b3FloatW4 value, int baseIndex, int bitCount )

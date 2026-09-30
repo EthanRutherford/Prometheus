@@ -473,56 +473,33 @@ static bool b3BuildEdgeContactW8( b3LocalManifold* manifold, const b3HullData* h
 
 // Transform a SoA point/normal stream (already split into X/Y/Z) by out = -(R*v (+t)).
 // The inputs come straight from the hull's stored SoA arrays, so there's no transpose here.
-static inline void b3NegativeTransformFromSoAW8( b3Matrix3* R, b3Vec3 p, const float* inX, const float* inY, const float* inZ,
+static inline void b3NegativeTransformFromSoAW8( b3Matrix3 R, b3Vec3 p, const float* inX, const float* inY, const float* inZ,
 												 int n, float* outX, float* outY, float* outZ, bool isPoint )
 {
-	B3_VALIDATE( ( (uintptr_t)outX & 0x1F ) == 0 );
-	B3_VALIDATE( ( (uintptr_t)outY & 0x1F ) == 0 );
-	B3_VALIDATE( ( (uintptr_t)outZ & 0x1F ) == 0 );
-
 	// row-column
-	b3FloatW8 r00 = b3SplatW8( R->cx.x );
-	b3FloatW8 r01 = b3SplatW8( R->cy.x );
-	b3FloatW8 r02 = b3SplatW8( R->cz.x );
-	b3FloatW8 r10 = b3SplatW8( R->cx.y );
-	b3FloatW8 r11 = b3SplatW8( R->cy.y );
-	b3FloatW8 r12 = b3SplatW8( R->cz.y );
-	b3FloatW8 r20 = b3SplatW8( R->cx.z );
-	b3FloatW8 r21 = b3SplatW8( R->cy.z );
-	b3FloatW8 r22 = b3SplatW8( R->cz.z );
+	b3Vec3W8 r0 = { b3SplatW8( R.cx.x ), b3SplatW8( R.cy.x ), b3SplatW8( R.cz.x ) };
+	b3Vec3W8 r1 = { b3SplatW8( R.cx.y ), b3SplatW8( R.cy.y ), b3SplatW8( R.cz.y ) };
+	b3Vec3W8 r2 = { b3SplatW8( R.cx.z ), b3SplatW8( R.cy.z ), b3SplatW8( R.cz.z ) };
 
-	b3FloatW8 tx = b3ZeroW8();
-	b3FloatW8 ty = b3ZeroW8();
-	b3FloatW8 tz = b3ZeroW8();
-
+	b3Vec3W8 t = { b3ZeroW8(), b3ZeroW8(), b3ZeroW8() };
 	if ( isPoint )
 	{
-		tx = b3SplatW8( p.x );
-		ty = b3SplatW8( p.y );
-		tz = b3SplatW8( p.z );
+		t = b3SplatVW8( p );
 	}
 
 	for ( int i = 0; i < n; i += B3_SIMD_WIDTH )
 	{
-		b3FloatW8 x = b3LoadW8( inX + i );
-		b3FloatW8 y = b3LoadW8( inY + i );
-		b3FloatW8 z = b3LoadW8( inZ + i );
+		b3Vec3W8 v = b3LoadVW8( inX + i, inY + i, inZ + i );
 
 		// Rotate eight vectors at a time
-		b3FloatW8 ox = b3Dot3W8( r00, r01, r02, x, y, z );
-		b3FloatW8 oy = b3Dot3W8( r10, r11, r12, x, y, z );
-		b3FloatW8 oz = b3Dot3W8( r20, r21, r22, x, y, z );
+		b3Vec3W8 out = { b3DotW8( r0, v ), b3DotW8( r1, v ), b3DotW8( r2, v ) };
 
 		if ( isPoint )
 		{
-			ox = b3AddW8( ox, tx );
-			oy = b3AddW8( oy, ty );
-			oz = b3AddW8( oz, tz );
+			out = b3AddVW8( out, t );
 		}
 
-		b3StoreW8( outX + i, b3NegW8( ox ) );
-		b3StoreW8( outY + i, b3NegW8( oy ) );
-		b3StoreW8( outZ + i, b3NegW8( oz ) );
+		b3StoreVW8( outX + i, outY + i, outZ + i, b3NegVW8( out ) );
 	}
 }
 
@@ -530,37 +507,32 @@ _Static_assert( B3_MAX_HULL_VERTICES == 128, "must be 128" );
 
 #define B3_HULL_BIT_COUNT 7
 
-// SIMD support point calculation using a SoA vertex array padded with repeats of the first vertex
-// to a multiple of B3_SIMD_WIDTH.
+// SIMD support point calculation using a SoA vertex array padded to a multiple of 8.
 //
 // This minimizes (bias - dot), where the caller is expected to provide a bias that makes this always positive.
-// It can be direction dependent. The bias should be just big enough to ensure the value if positive because
+// It can be direction dependent. The bias should be just big enough to ensure the value is positive because
 // an excessive bias causes a precision loss in the support calculation.
 //
 // The vertex index is embedded in the low B3_HULL_BIT_COUNT mantissa bits of the value. By minimizing a value that
-// is always positive, the minimum carries the smallest index so that padded SoA values will never win. This is
+// is always positive, the minimum carries the smallest index so that padded SoA values will never win. This is the
 // purpose of using the bias instead of maximizing the dot directly.
 //
 // The support is then recomputed exactly as dot(normal, vertex), without the embedded index.
 // todo consider using this for GJK
 static inline void b3GetSupportW8( b3Vec3 normal, const float* vx, const float* vy, const float* vz, int n, float bias,
-									   float* support, int* vertexIndex )
+								   float* support, int* vertexIndex )
 {
-	const b3FloatW8 nx = b3SplatW8( normal.x );
-	const b3FloatW8 ny = b3SplatW8( normal.y );
-	const b3FloatW8 nz = b3SplatW8( normal.z );
+	const b3Vec3W8 normalW = b3SplatVW8( normal );
 	const b3FloatW8 biasV = b3SplatW8( bias );
 
 	// Start the minimum at a large value.
-	b3FloatW8 minValue = b3SplatW8( B3_HUGE );
+	b3FloatW8 minValue = b3SplatW8( INFINITY );
 
 	// Tail lanes hold vertex 0 with index bits >= vertexCount, so they never become the min value.
 	for ( int i = 0; i < n; i += B3_SIMD_WIDTH )
 	{
-		b3FloatW8 x = b3LoadW8( vx + i );
-		b3FloatW8 y = b3LoadW8( vy + i );
-		b3FloatW8 z = b3LoadW8( vz + i );
-		b3FloatW8 d = b3AddW8( b3MulW8( nz, z ), b3AddW8( b3MulW8( ny, y ), b3MulW8( nx, x ) ) );
+		b3Vec3W8 v = b3LoadVW8( vx + i, vy + i, vz + i );
+		b3FloatW8 d = b3DotW8( normalW, v );
 
 		// This is always positive.
 		b3FloatW8 value = b3SubW8( biasV, d );
@@ -595,65 +567,95 @@ static inline void b3GetFaceDotsW8( const b3HullData* hull, b3Vec3 d, float* dot
 	const float* ny = nx + soaFaceCount;
 	const float* nz = ny + soaFaceCount;
 
-	b3FloatW8 dx = b3SplatW8( d.x );
-	b3FloatW8 dy = b3SplatW8( d.y );
-	b3FloatW8 dz = b3SplatW8( d.z );
+	b3Vec3W8 dW = b3SplatVW8( d );
 
 	for ( int i = 0; i < soaFaceCount; i += B3_SIMD_WIDTH )
 	{
 		// dot product per lane
-		b3FloatW8 m = b3Dot3W8( b3LoadW8( nx + i ), b3LoadW8( ny + i ), b3LoadW8( nz + i ), dx, dy, dz );
+		b3FloatW8 m = b3DotW8( b3LoadVW8( nx + i, ny + i, nz + i ), dW );
 		b3StoreW8( dots + i, m );
 	}
 }
 
 #define B3_PARALLEL_TOL 1e-4f
 
-// A hull edges is bounded by two face normals. On the Gauss map the edge becomes an arc between
-// those two face normals. This edge can only build the best separating axis if a normal on that arc
-// can beat the best separation value seen so far. This test determines of such a normal exists.
+// A hull edge is bounded by two face normals. On the Gauss map the edge becomes an arc between
+// those two face normals. An edge can only build the best separating axis if a normal on that arc
+// can beat the best separation value seen so far. This function determines if the upper bound
+// separation on that arc can possibly beat the current maximum face separation.
+//
 // This follows the upper bound used for hull faces:
 // separation_upper_bound = dot(axis, centerB - centerA) - innerRadiusA - innerRadiusB
 //
 // Inputs:
 // d the vector connecting the hull centers
-// a = dot(u, d)
-// b = dot(v, d)
-// c = dot(u, v)
-// length = length(d)
-// bound = max_sep + radiusBound
-// Note: this doesn't compute the separation, it just rules out potential candidates. So if some input
-// is degenerate it just pass the candidate onto the next stage.
-static inline int b3ArcCanReachW8( float a, float b, float c, float length, float bound )
+// a1 = dot(n1, d)
+// a2 = dot(n2, d)
+// c = dot(n1, n2)
+// bound = maxFaceSeparation + radiusBound
+//
+// This returns 1 if the edges is a candidate and 0 otherwise.
+static inline int b3TestEdgeCandidateW8( float a1, float a2, float c, float bound )
 {
 	// c = cos(theta), the angle between the normals.
 	// s = sin(theta)^2 >= 0
 	float s = 1.0f - c * c;
 
-	// This is coincidently the law of cosines. Break out your protractor.
-	float t = a * a + b * b - 2.0f * a * b * c;
+	// This is coincidentally the law of cosines. Break out your protractor.
+	float t = a1 * a1 + a2 * a2 - 2.0f * a1 * a2 * c;
 
-	// Do either face normals beat the best separation?
-	int endpoint = b3MaxFloat( a, b ) >= bound;
+	// Exterior conditions:
+	// Can either face normal beat the best separation? These cover the case where
+	// d is outside the arc. Note that d pointing outside the arc does not cull this
+	// edge. It can still generate the maximum separation (happens commonly).
+	// Note: when earlyReturn == false, bound == -INFINITY and this is always true.
+	int exterior = b3MaxFloat( a1, a2 ) >= bound;
 
-	// Project d into the plane that holds both u and v, call that vector g:
-	// g = x*u + y*v
-	// Note that dot(u, g) == dot(u, d) == a, and dot(v, g) == dot(v, d) == b
-	// Dot the equation with u and v:
-	// a = x + y*c
-	// b = x*c + y
-	// Solve for x and y using Cramer's Rule
-	// x = (a - b * c) / (1 - c * c)
-	// y = (b - a * c) / (1 - c * c)
-	// s = 1 - c * c is greater than 0, so x and y must be positive for n to live between u and v.
-	// The peak value along d is then dot(g, n):
-	// dot(g, n) = x*a + y*b = (a*a - a*b*c + b*b - a*b*c) / s = (a*a + b*b - 2*a*b*c) / s = t / s
-	// If that peak value beats the threshold then this edge might form the best separating axis.
-	// Using bit ops here to prevent unpredictable branches.
-	int interior = ( a >= c * b ) & ( b >= c * a ) & ( length >= bound ) &
-				   ( ( bound <= 0.0f ) | ( s < B3_PARALLEL_TOL ) | ( t >= bound * bound * s ) );
+	// Project d into the plane that holds both n1 and n2, call that vector dp.
+	// Introduce the coordinates b1 and b2 (these have units of length).
+	//
+	// dp = b1*n1 + b2*n2
+	//
+	// Since dp is the projection of d into the plane formed by the cross(n1, n2):
+	// dot(n1, dp) == dot(n1, d) == a1
+	// dot(n2, dp) == dot(n2, d) == a2
+	//
+	// Dot the equation with n1 and n2:
+	// a1 = b1 + b2*c
+	// a2 = b1*c + b2
+	//
+	// Solve for b1 and b2 using Cramer's Rule
+	// b1 = (a1 - a2 * c) / s
+	// b2 = (a2 - a1 * c) / s
+	//
+	// s = 1 - c * c is positive, so b1 and b2 must be positive for d to live in
+	// the arc between n1 and n2.
+	//
+	// The peak value along d is then norm(dp):
+	// dot(dp, dp) = dot(b1*n1 + b2*n2, d)
+	//             = b1*a1 + b2*a2
+	//             = (a1*a1 - a1*a2*c + a2*a2 - a1*a2*c) / s
+	//             = (a1*a1 + a2*a2 - 2*a1*a2*c) / s
+	//             = t / s
+	//
+	// The interior is a candidate if:
+	// norm(dp) > bound
+	// sqrt(t / s) > bound
+	// If bound < 0 this is always true. Otherwise
+	// t > bound^2 * s
+	//
+	// Interior conditions:
+	// b1 and b2 positive (interior arc): a1 >= c * a2 & a2 >= c * a1
+	// bound <= 0.0: the interior arc is automatically a candidate because it is positive
+	// s < B3_PARALLEL_TOL : n1 and n2 are nearly parallel so give up and pass the edge to the next stage
+	// t >= bound * bound * s : bound is positive and the interior normal direction is a candidate
+	//
+	// Using bit ops here to avoid branches.
 
-	return endpoint | interior;
+	int interior =
+		( a1 >= c * a2 ) & ( a2 >= c * a1 ) & ( ( bound <= 0.0f ) | ( s < B3_PARALLEL_TOL ) | ( t >= bound * bound * s ) );
+
+	return exterior | interior;
 }
 
 // Temporary abbreviations for convenience.
@@ -846,7 +848,6 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 			res.faceB.separation = separation;
 			res.faceB.indexA = vertexIndex;
 			res.faceB.indexB = i;
-			// This points from A to B and is in frame A
 			if ( separation > speculativeDistance && earlyReturn )
 			{
 				res.separatedFeature = b3_faceAxisB;
@@ -864,7 +865,9 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 	// dot(edgeNormal, deltaCenter) - radiusBound > maxSep
 	float edgeBound = earlyReturn ? b3MaxFloat( res.faceA.separation, res.faceB.separation ) + radiusBound : -INFINITY;
 
-	// Gather edges of A that can feasibly create a winning separating axis.
+	B3_VALIDATE( earlyReturn == false || centerDistance >= edgeBound );
+
+	// Gather edges of A that can feasibly create a separating axis that beats the maximum face separation.
 	int halfEdgeCountA = hullA->edgeCount;
 	const b3HullHalfEdge* halfEdgesA = b3GetHullEdges( hullA );
 	int edgeIndicesA[NE];
@@ -875,10 +878,10 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 		int i2 = halfEdgesA[i + 1].face;
 		float c = b3Dot( planesA[i1].normal, planesA[i2].normal );
 		edgeIndicesA[na] = i;
-		na += b3ArcCanReachW8( dotA[i1], dotA[i2], c, centerDistance, edgeBound );
+		na += b3TestEdgeCandidateW8( dotA[i1], dotA[i2], c, edgeBound );
 	}
 
-	// Gather edges of B that can feasibly create a winning separating axis.
+	// Similar for edges of B.
 	int halfEdgeCountB = hullB->edgeCount;
 	const b3HullHalfEdge* halfEdgesB = b3GetHullEdges( hullB );
 	int edgeIndicesB[B3_MAX_HULL_EDGES];
@@ -889,7 +892,7 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 		int i2 = halfEdgesB[i + 1].face;
 		float c = b3Dot( planesB[i1].normal, planesB[i2].normal );
 		edgeIndicesB[nb] = i;
-		nb += b3ArcCanReachW8( dotB[i1], dotB[i2], c, centerDistance, edgeBound );
+		nb += b3TestEdgeCandidateW8( dotB[i1], dotB[i2], c, edgeBound );
 	}
 
 	if ( na == 0 || nb == 0 )
@@ -915,45 +918,8 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 	const float* nyB = nxB + soaFaceCountB;
 	const float* nzB = nyB + soaFaceCountB;
 
-	b3NegativeTransformFromSoAW8( &R, xfB.p, nxB, nyB, nzB, soaFaceCountB, bFNx, bFNy, bFNz, false );
-	b3NegativeTransformFromSoAW8( &R, xfB.p, vxB, vyB, vzB, soaVertexCountB, bWx, bWy, bWz, true );
-
-	// Per B edge data. C and D are the two face normals, v0 a vertex, DC the edge vector.
-	_Alignas( 32 ) float bCx[NE];
-	_Alignas( 32 ) float bCy[NE];
-	_Alignas( 32 ) float bCz[NE];
-	_Alignas( 32 ) float bDx[NE];
-	_Alignas( 32 ) float bDy[NE];
-	_Alignas( 32 ) float bDz[NE];
-	_Alignas( 32 ) float bV0x[NE];
-	_Alignas( 32 ) float bV0y[NE];
-	_Alignas( 32 ) float bV0z[NE];
-	_Alignas( 32 ) float bDCx[NE];
-	_Alignas( 32 ) float bDCy[NE];
-	_Alignas( 32 ) float bDCz[NE];
-
-	for ( int k = 0; k < nb; ++k )
-	{
-		const b3HullHalfEdge* edge = halfEdgesB + edgeIndicesB[k];
-		const b3HullHalfEdge* twin = edge + 1;
-		int f0 = edge->face;
-		int f1 = twin->face;
-		int v0 = edge->origin;
-		int v1 = twin->origin;
-
-		bCx[k] = bFNx[f0];
-		bCy[k] = bFNy[f0];
-		bCz[k] = bFNz[f0];
-		bDx[k] = bFNx[f1];
-		bDy[k] = bFNy[f1];
-		bDz[k] = bFNz[f1];
-		bV0x[k] = bWx[v0];
-		bV0y[k] = bWy[v0];
-		bV0z[k] = bWz[v0];
-		bDCx[k] = bWx[v1] - bWx[v0];
-		bDCy[k] = bWy[v1] - bWy[v0];
-		bDCz[k] = bWz[v1] - bWz[v0];
-	}
+	b3NegativeTransformFromSoAW8( R, xfB.p, nxB, nyB, nzB, soaFaceCountB, bFNx, bFNy, bFNz, false );
+	b3NegativeTransformFromSoAW8( R, xfB.p, vxB, vyB, vzB, soaVertexCountB, bWx, bWy, bWz, true );
 
 	// Per A edge data, already in A's space so just gathered. n0 and n1 are the two face
 	// normals, d the edge vector av1-av0, v0 the first vertex. Tol is the
@@ -1003,61 +969,54 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 
 	// Zero the tail lanes.
 	b3FloatW8 zero = b3ZeroW8();
-	b3StoreW8( aN0x + na, zero );
-	b3StoreW8( aN0y + na, zero );
-	b3StoreW8( aN0z + na, zero );
-	b3StoreW8( aN1x + na, zero );
-	b3StoreW8( aN1y + na, zero );
-	b3StoreW8( aN1z + na, zero );
-	b3StoreW8( aDx + na, zero );
-	b3StoreW8( aDy + na, zero );
-	b3StoreW8( aDz + na, zero );
-	b3StoreW8( aV0x + na, zero );
-	b3StoreW8( aV0y + na, zero );
-	b3StoreW8( aV0z + na, zero );
+	b3Vec3W8 zeroV = { zero, zero, zero };
+	b3StoreVW8( aN0x + na, aN0y + na, aN0z + na, zeroV );
+	b3StoreVW8( aN1x + na, aN1y + na, aN1z + na, zeroV );
+	b3StoreVW8( aDx + na, aDy + na, aDz + na, zeroV );
+	b3StoreVW8( aV0x + na, aV0y + na, aV0z + na, zeroV );
+
 	b3StoreW8( aTol + na, zero );
 
-	// Edge phase, one B edge against eight A edges at a time, no transforms in the loop.
-	const b3FloatW8 EPS = b3SplatW8( -0.0001f );
+	float linearSlop = B3_LINEAR_SLOP;
+
+	// This tolerance can skip edges shorter than 1cm.
+	const b3FloatW8 EPS = b3SplatW8( -linearSlop * linearSlop );
 	const b3FloatW8 INF = b3SplatW8( INFINITY );
 
 	for ( int j = 0; j < nb; ++j )
 	{
-		const b3FloatW8 Cx = b3SplatW8( bCx[j] );
-		const b3FloatW8 Cy = b3SplatW8( bCy[j] );
-		const b3FloatW8 Cz = b3SplatW8( bCz[j] );
-		const b3FloatW8 Dx = b3SplatW8( bDx[j] );
-		const b3FloatW8 Dy = b3SplatW8( bDy[j] );
-		const b3FloatW8 Dz = b3SplatW8( bDz[j] );
-		const b3FloatW8 DCx = b3SplatW8( bDCx[j] );
-		const b3FloatW8 DCy = b3SplatW8( bDCy[j] );
-		const b3FloatW8 DCz = b3SplatW8( bDCz[j] );
-		const b3FloatW8 bv0x = b3SplatW8( bV0x[j] );
-		const b3FloatW8 bv0y = b3SplatW8( bV0y[j] );
-		const b3FloatW8 bv0z = b3SplatW8( bV0z[j] );
+		const b3HullHalfEdge* edge = halfEdgesB + edgeIndicesB[j];
+		const b3HullHalfEdge* twin = edge + 1;
+		int f0 = edge->face;
+		int f1 = twin->face;
+		int v0 = edge->origin;
+		int v1 = twin->origin;
+
+		b3Vec3 nC = { bFNx[f0], bFNy[f0], bFNz[f0] };
+		b3Vec3 nD = { bFNx[f1], bFNy[f1], bFNz[f1] };
+		b3Vec3 pB = { bWx[v0], bWy[v0], bWz[v0] };
+		b3Vec3 qB = { bWx[v1], bWy[v1], bWz[v1] };
+
+		const b3Vec3W8 C = b3SplatVW8( nC );
+		const b3Vec3W8 D = b3SplatVW8( nD );
+		const b3Vec3W8 DC = b3SplatVW8( b3Sub( qB, pB ) );
+		const b3Vec3W8 bv0 = b3SplatVW8( pB );
 
 		for ( int i = 0; i < na; i += B3_SIMD_WIDTH )
 		{
-			b3FloatW8 n0x = b3LoadW8( aN0x + i );
-			b3FloatW8 n0y = b3LoadW8( aN0y + i );
-			b3FloatW8 n0z = b3LoadW8( aN0z + i );
-			b3FloatW8 n1x = b3LoadW8( aN1x + i );
-			b3FloatW8 n1y = b3LoadW8( aN1y + i );
-			b3FloatW8 n1z = b3LoadW8( aN1z + i );
-			b3FloatW8 dx = b3LoadW8( aDx + i );
-			b3FloatW8 dy = b3LoadW8( aDy + i );
-			b3FloatW8 dz = b3LoadW8( aDz + i );
-			b3FloatW8 v0x = b3LoadW8( aV0x + i );
-			b3FloatW8 v0y = b3LoadW8( aV0y + i );
-			b3FloatW8 v0z = b3LoadW8( aV0z + i );
+			b3Vec3W8 n0 = b3LoadVW8( aN0x + i, aN0y + i, aN0z + i );
+			b3Vec3W8 n1 = b3LoadVW8( aN1x + i, aN1y + i, aN1z + i );
+			b3Vec3W8 d = b3LoadVW8( aDx + i, aDy + i, aDz + i );
+			b3Vec3W8 av0 = b3LoadVW8( aV0x + i, aV0y + i, aV0z + i );
+
 			b3FloatW8 tol = b3LoadW8( aTol + i );
 
 			// CBA = C.dir, DBA = D.dir, where dir = B_x_A
-			b3FloatW8 CBA = b3Dot3W8( Cx, Cy, Cz, dx, dy, dz );
-			b3FloatW8 DBA = b3Dot3W8( Dx, Dy, Dz, dx, dy, dz );
+			b3FloatW8 CBA = b3DotW8( C, d );
+			b3FloatW8 DBA = b3DotW8( D, d );
 			// ADC = n0.DC, BDC = n1.DC, where DC = D_x_C
-			b3FloatW8 ADC = b3Dot3W8( n0x, n0y, n0z, DCx, DCy, DCz );
-			b3FloatW8 BDC = b3Dot3W8( n1x, n1y, n1z, DCx, DCy, DCz );
+			b3FloatW8 ADC = b3DotW8( n0, DC );
+			b3FloatW8 BDC = b3DotW8( n1, DC );
 
 			// Gauss map arc crossing test, CBA*DBA<eps and ADC*BDC<eps and CBA*BDC<eps
 			b3FloatW8 m1 = b3LessThanW8( b3MulW8( CBA, DBA ), EPS );
@@ -1078,51 +1037,41 @@ b3AxisQuery b3ComputeSeparatingAxisW8( const b3HullData* hullA, const b3HullData
 			}
 
 			// t = -CBA / (DBA - CBA)
-			b3FloatW8 t = b3DivW8( b3SubW8( zero, CBA ), b3SubW8( DBA, CBA ) );
+			b3FloatW8 t = b3DivW8( b3NegW8( CBA ), b3SubW8( DBA, CBA ) );
 
 			// normal = lerp(t, C, D) = C + (D-C)*t
-			b3FloatW8 nx = b3MulAddW8( Cx, t, b3SubW8( Dx, Cx ) );
-			b3FloatW8 ny = b3MulAddW8( Cy, t, b3SubW8( Dy, Cy ) );
-			b3FloatW8 nz = b3MulAddW8( Cz, t, b3SubW8( Dz, Cz ) );
+			b3Vec3W8 n = b3MulAddSVW8( C, t, b3SubVW8( D, C ) );
 
 			// normalize
-			b3FloatW8 len2 = b3Dot3W8( nx, ny, nz, nx, ny, nz );
+			b3FloatW8 len2 = b3DotW8( n, n );
 			b3FloatW8 inv = b3DivW8( b3SplatW8( 1.0f ), b3SqrtW8( len2 ) );
-			nx = b3MulW8( nx, inv );
-			ny = b3MulW8( ny, inv );
-			nz = b3MulW8( nz, inv );
+			n = b3MulSVW8( inv, n );
 
 			// support = dot(normal, av0 + bv0)
-			b3FloatW8 sx = b3AddW8( v0x, bv0x );
-			b3FloatW8 sy = b3AddW8( v0y, bv0y );
-			b3FloatW8 sz = b3AddW8( v0z, bv0z );
-			b3FloatW8 support = b3Dot3W8( sx, sy, sz, nx, ny, nz );
+			b3FloatW8 support = b3DotW8( b3AddVW8( av0, bv0 ), n );
 
 			// Lanes that fail the Gauss test can never win.
 			support = b3BlendW8( INF, support, mask );
-			b3FloatW8 separation = b3SubW8( zero, support );
+			b3FloatW8 separation = b3NegW8( support );
 
 			// Test all B3_SIMD_WIDTH supports against the running best at once. If none beats it, skip the
-			// store and scalar reduction. res->support only turns negative just before returning,
-			// so this never skips a lane that would trigger the early out.
+			// store and scalar reduction.
 			b3FloatW8 improves = b3GreaterThanW8( separation, b3SplatW8( res.edge.separation ) );
 			if ( b3AnyTrueW8( improves ) == false )
 			{
 				continue;
 			}
 
-			_Alignas( 32 ) float sA[B3_SIMD_WIDTH];
-			_Alignas( 32 ) float nxA[B3_SIMD_WIDTH];
-			_Alignas( 32 ) float nyA[B3_SIMD_WIDTH];
-			_Alignas( 32 ) float nzA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float sA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float nxA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float nyA[B3_SIMD_WIDTH];
+			_Alignas( 16 ) float nzA[B3_SIMD_WIDTH];
 			b3StoreW8( sA, separation );
-			b3StoreW8( nxA, nx );
-			b3StoreW8( nyA, ny );
-			b3StoreW8( nzA, nz );
+			b3StoreVW8( nxA, nyA, nzA, n );
 
 			// Reduce in lane order so ties keep the first edge and the early out takes the first
 			// improving support below zero. Padded tail lanes carry +INF support, so they never
-			// update or index a->edges out of range.
+			// update or index edges out of range.
 			for ( int lane = 0; lane < B3_SIMD_WIDTH; lane++ )
 			{
 				int ei = i + lane;
@@ -1452,12 +1401,16 @@ void b3CollideHullsW8( b3LocalManifold* manifold, int capacity, const b3HullData
 		return;
 	}
 
+	float faceSeparation = b3MaxFloat( axisQuery.faceA.separation, axisQuery.faceB.separation );
 	float clipSeparation = cache->separation;
 	float edgeTol = linearSlop;
 
-	// Face contact can be empty if it does not realize the axis of minimum penetration.
-	// Create edge contact if face contact fails or edge contact is significantly better!
-	if ( manifold->pointCount == 0 || edgeQuery.separation > clipSeparation + edgeTol )
+	// Face contact can be empty if it is not the axis of maximum separation. It can also
+	// be empty in narrow cases in the speculative region. If that case was important then
+	// a GJK fallback would be used. So far it doesn't seem important.
+	// Create edge contact if face contact fails or edge contact is significantly better.
+	if ( ( manifold->pointCount == 0 && edgeQuery.separation > faceSeparation ) ||
+		 edgeQuery.separation > clipSeparation + edgeTol )
 	{
 		B3_ASSERT( 0 <= edgeQuery.indexA && edgeQuery.indexA < hullA->edgeCount );
 		B3_ASSERT( 0 <= edgeQuery.indexB && edgeQuery.indexB < hullB->edgeCount );

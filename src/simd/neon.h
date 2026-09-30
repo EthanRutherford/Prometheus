@@ -334,12 +334,6 @@ static inline b3FloatW4 b3BlendW4( b3FloatW4 a, b3FloatW4 b, b3FloatW4 mask )
 	return vbslq_f32( mask32, b, a );
 }
 
-static inline b3FloatW4 b3Dot3W4( b3FloatW4 ax, b3FloatW4 ay, b3FloatW4 az, b3FloatW4 bx,
-										  b3FloatW4 by, b3FloatW4 bz )
-{
-	return vaddq_f32( vmulq_f32( ax, bx ), vaddq_f32( vmulq_f32( ay, by ), vmulq_f32( az, bz ) ) );
-}
-
 static inline b3FloatW4 b3EmbedIndexW4( b3FloatW4 value, int baseIndex, int bitCount )
 {
 	uint32_t mask = ( 1u << bitCount ) - 1;

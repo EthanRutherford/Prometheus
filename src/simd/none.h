@@ -373,17 +373,6 @@ static inline b3FloatW4 b3BlendW4( b3FloatW4 a, b3FloatW4 b, b3FloatW4 mask )
 	return r;
 }
 
-static inline b3FloatW4 b3Dot3W4( b3FloatW4 ax, b3FloatW4 ay, b3FloatW4 az, b3FloatW4 bx,
-										  b3FloatW4 by, b3FloatW4 bz )
-{
-	b3FloatW4 r;
-	r.x = ax.x * bx.x + ( ay.x * by.x + az.x * bz.x );
-	r.y = ax.y * bx.y + ( ay.y * by.y + az.y * bz.y );
-	r.z = ax.z * bx.z + ( ay.z * by.z + az.z * bz.z );
-	r.w = ax.w * bx.w + ( ay.w * by.w + az.w * bz.w );
-	return r;
-}
-
 static inline b3FloatW4 b3EmbedIndexW4( b3FloatW4 value, int baseIndex, int bitCount )
 {
 	uint32_t mask = ( 1u << bitCount ) - 1;
