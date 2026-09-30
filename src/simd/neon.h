@@ -352,20 +352,20 @@ static inline int b3MinIndexW4( b3FloatW4 a, int bitCount )
 	return (int)( bits & ( ( 1u << bitCount ) - 1 ) );
 }
 
-typedef struct b3AABBV4
+typedef struct b3AABBV
 {
 	float32x4_t lower;
 	float32x4_t upper;
-} b3AABBV4;
+} b3AABBV;
 
-B3_FORCE_INLINE b3AABBV4 b3LoadAABBV4( const b3AABB* aabb )
+B3_FORCE_INLINE b3AABBV b3LoadAABBV( const b3AABB* aabb )
 {
 	const float* base = &aabb->lowerBound.x;
 
 	// Offset to avoid reading off the end (avoid UB).
 	// [lz ux uy uz]
 	float32x4_t v1 = vld1q_f32( base + 2 );
-	b3AABBV4 result;
+	b3AABBV result;
 	// [lx ly lz -]
 	result.lower = vld1q_f32( base );
 	// [ux uy uz -]
@@ -373,37 +373,37 @@ B3_FORCE_INLINE b3AABBV4 b3LoadAABBV4( const b3AABB* aabb )
 	return result;
 }
 
-B3_FORCE_INLINE bool b3OverlapAABBV4( b3AABBV4 a, b3AABBV4 b )
+B3_FORCE_INLINE bool b3OverlapAABBV( b3AABBV a, b3AABBV b )
 {
 	static const uint32_t laneMask[4] = { 0, 0, 0, 0xFFFFFFFFu };
 	uint32x4_t test = vandq_u32( vcleq_f32( a.lower, b.upper ), vcleq_f32( b.lower, a.upper ) );
 	return vminvq_u32( vorrq_u32( test, vld1q_u32( laneMask ) ) ) != 0;
 }
 
-B3_FORCE_INLINE bool b3OverlapNode4( b3AABBV4 av, const b3TreeNode* node )
+B3_FORCE_INLINE bool b3OverlapNode4( b3AABBV av, const b3TreeNode* node )
 {
-	return b3OverlapAABBV4( av, b3LoadAABBV4( &node->aabb ) );
+	return b3OverlapAABBV( av, b3LoadAABBV( &node->aabb ) );
 }
 
-B3_FORCE_INLINE bool b3OverlapV4( const b3AABB* a, const b3AABB* b )
+B3_FORCE_INLINE bool b3OverlapV( const b3AABB* a, const b3AABB* b )
 {
-	return b3OverlapAABBV4( b3LoadAABBV4( a ), b3LoadAABBV4( b ) );
+	return b3OverlapAABBV( b3LoadAABBV( a ), b3LoadAABBV( b ) );
 }
 
-B3_FORCE_INLINE b3AABBV4 b3UnionAABBV4( b3AABBV4 a, b3AABBV4 b )
+B3_FORCE_INLINE b3AABBV b3UnionAABBV( b3AABBV a, b3AABBV b )
 {
-	b3AABBV4 result;
+	b3AABBV result;
 	result.lower = vminq_f32( a.lower, b.lower );
 	result.upper = vmaxq_f32( a.upper, b.upper );
 	return result;
 }
 
-B3_FORCE_INLINE b3AABBV4 b3UnionPairV4( const b3TreeNode* pair )
+B3_FORCE_INLINE b3AABBV b3UnionPairV( const b3TreeNode* pair )
 {
-	return b3UnionAABBV4( b3LoadAABBV4( &pair[0].aabb ), b3LoadAABBV4( &pair[1].aabb ) );
+	return b3UnionAABBV( b3LoadAABBV( &pair[0].aabb ), b3LoadAABBV( &pair[1].aabb ) );
 }
 
-B3_FORCE_INLINE void b3StoreAABBV4( b3AABB* aabb, b3AABBV4 value, bool condition )
+B3_FORCE_INLINE void b3StoreAABBV( b3AABB* aabb, b3AABBV value, bool condition )
 {
 	float32x4_t raw0 = vsetq_lane_f32( vgetq_lane_f32( value.upper, 0 ), value.lower, 3 );
 	float32x4_t rotated = vextq_f32( value.upper, value.upper, 1 );

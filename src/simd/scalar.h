@@ -401,40 +401,40 @@ static inline int b3MinIndexW4( b3FloatW4 a, int bitCount )
 	return (int)( bits & ( ( 1u << bitCount ) - 1 ) );
 }
 
-typedef b3AABB b3AABBV4;
+typedef b3AABB b3AABBV;
 
-B3_FORCE_INLINE b3AABBV4 b3LoadAABBV4( const b3AABB* aabb )
+B3_FORCE_INLINE b3AABBV b3LoadAABBV( const b3AABB* aabb )
 {
 	return *aabb;
 }
 
-B3_FORCE_INLINE bool b3OverlapAABBV4( b3AABBV4 a, b3AABBV4 b )
+B3_FORCE_INLINE bool b3OverlapAABBV( b3AABBV a, b3AABBV b )
 {
 	return a.lowerBound.x <= b.upperBound.x && a.lowerBound.y <= b.upperBound.y && a.lowerBound.z <= b.upperBound.z &&
 		   b.lowerBound.x <= a.upperBound.x && b.lowerBound.y <= a.upperBound.y && b.lowerBound.z <= a.upperBound.z;
 }
 
-B3_FORCE_INLINE bool b3OverlapNode4( b3AABBV4 av, const b3TreeNode* node )
+B3_FORCE_INLINE bool b3OverlapNode4( b3AABBV av, const b3TreeNode* node )
 {
-	return b3OverlapAABBV4( av, node->aabb );
+	return b3OverlapAABBV( av, node->aabb );
 }
 
-B3_FORCE_INLINE bool b3OverlapV4( const b3AABB* a, const b3AABB* b )
+B3_FORCE_INLINE bool b3OverlapV( const b3AABB* a, const b3AABB* b )
 {
 	return b3OverlapAABBV( *a, *b );
 }
 
-B3_FORCE_INLINE b3AABBV4 b3UnionAABBV4( b3AABBV4 a, b3AABBV4 b )
+B3_FORCE_INLINE b3AABBV b3UnionAABBV( b3AABBV a, b3AABBV b )
 {
 	return b3AABB_Union( a, b );
 }
 
-B3_FORCE_INLINE b3AABBV4 b3UnionPairV4( const b3TreeNode* pair )
+B3_FORCE_INLINE b3AABBV b3UnionPairV( const b3TreeNode* pair )
 {
 	return b3AABB_Union( pair[0].aabb, pair[1].aabb );
 }
 
-B3_FORCE_INLINE void b3StoreAABBV4( b3AABB* aabb, b3AABBV4 value, bool condition )
+B3_FORCE_INLINE void b3StoreAABBV( b3AABB* aabb, b3AABBV value, bool condition )
 {
 	if ( condition )
 	{
