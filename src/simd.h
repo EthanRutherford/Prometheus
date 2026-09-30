@@ -31,7 +31,7 @@
 
 #else
 
-#include "simd/none.h"
+#include "simd/scalar.h"
 
 #endif
 
