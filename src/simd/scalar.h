@@ -414,7 +414,7 @@ B3_FORCE_INLINE bool b3OverlapAABBV( b3AABBV a, b3AABBV b )
 		   b.lowerBound.x <= a.upperBound.x && b.lowerBound.y <= a.upperBound.y && b.lowerBound.z <= a.upperBound.z;
 }
 
-B3_FORCE_INLINE bool b3OverlapNode4( b3AABBV av, const b3TreeNode* node )
+B3_FORCE_INLINE bool b3OverlapNode( b3AABBV av, const b3TreeNode* node )
 {
 	return b3OverlapAABBV( av, node->aabb );
 }

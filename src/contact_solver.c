@@ -1083,7 +1083,7 @@ void ( *b3StoreImpulses_ConvexW )( b3SolverBlock block, b3StepContext* context, 
 #define B3_SIMD_DISPATCH( name, ... )                                                                                            \
 	do                                                                                                                           \
 	{                                                                                                                            \
-		b3_supportsW8() ? ( name = name##8 ) : ( name = name##4 );                                                               \
+		b3SupportsW8() ? ( name = name##8 ) : ( name = name##4 );                                                               \
 		name( __VA_ARGS__ );                                                                                                     \
 	}                                                                                                                            \
 	while ( 0 )
@@ -1144,7 +1144,7 @@ int b3GetWideContactConstraintByteCount( void )
 	if ( wideContactConstraintByteCount == -1 )
 	{
 		wideContactConstraintByteCount =
-			b3_supportsW8() ? b3GetWideContactConstraintByteCountW8() : b3GetWideContactConstraintByteCountW4();
+			b3SupportsW8() ? b3GetWideContactConstraintByteCountW8() : b3GetWideContactConstraintByteCountW4();
 	}
 
 	return wideContactConstraintByteCount;

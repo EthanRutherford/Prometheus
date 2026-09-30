@@ -799,14 +799,14 @@ void ( *b3CollideHullsW )( b3LocalManifold* manifold, int capacity, const b3Hull
 
 b3AxisQuery dispatchSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn )
 {
-	b3ComputeSeparatingAxisW = b3_supportsW8() ? b3ComputeSeparatingAxisW8 : b3ComputeSeparatingAxisW4;
+	b3ComputeSeparatingAxisW = b3SupportsW8() ? b3ComputeSeparatingAxisW8 : b3ComputeSeparatingAxisW4;
 	return b3ComputeSeparatingAxisW( hullA, hullB, xfB, earlyReturn );
 }
 
 void dispatchCollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* hullA, const b3HullData* hullB,
 						   b3Transform transformBtoA, b3SATCache* cache )
 {
-	b3_supportsW8() ? ( b3CollideHullsW = b3CollideHullsW8 ) : ( b3CollideHullsW = b3CollideHullsW4 );
+	b3SupportsW8() ? ( b3CollideHullsW = b3CollideHullsW8 ) : ( b3CollideHullsW = b3CollideHullsW4 );
 	b3CollideHullsW( manifold, capacity, hullA, hullB, transformBtoA, cache );
 }
 

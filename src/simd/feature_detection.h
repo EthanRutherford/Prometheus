@@ -70,7 +70,7 @@ static const uint32_t b3_cpuid_avx2_bit = 1 << 5;
 static const uint64_t b3_cpuid_avx256_saved = ( (uint64_t)1 ) << 2;
 static const uint32_t b3_cpuid_osxsave = ( ( (uint32_t)1 ) << 26 ) | ( ( (uint32_t)1 ) << 27 );
 
-static inline void b3_cpuid( uint32_t* eax, uint32_t* ebx, uint32_t* ecx, uint32_t* edx )
+static inline void b3Cpuid( uint32_t* eax, uint32_t* ebx, uint32_t* ecx, uint32_t* edx )
 {
 #if defined( _MSC_VER )
 	int cpu_info[4];
@@ -92,7 +92,7 @@ static inline void b3_cpuid( uint32_t* eax, uint32_t* ebx, uint32_t* ecx, uint32
 #endif
 }
 
-static inline uint64_t b3_xgetbv()
+static inline uint64_t b3Xgetbv( void )
 {
 #if defined( _MSC_VER )
 	return _xgetbv( 0 );
@@ -105,14 +105,14 @@ static inline uint64_t b3_xgetbv()
 #endif
 }
 
-static inline bool b3_supportsW8()
+static inline bool b3SupportsW8( void )
 {
 	uint32_t eax, ebx, ecx, edx;
 
 	// EBX for EAX=0x1
 	eax = 0x1;
 	ecx = 0x0;
-	b3_cpuid( &eax, &ebx, &ecx, &edx );
+	b3Cpuid( &eax, &ebx, &ecx, &edx );
 
 	if ( ( ecx & b3_cpuid_osxsave ) != b3_cpuid_osxsave )
 	{
@@ -120,7 +120,7 @@ static inline bool b3_supportsW8()
 	}
 
 	// xgetbv for checking if the OS saves registers
-	uint64_t xcr0 = b3_xgetbv();
+	uint64_t xcr0 = b3Xgetbv();
 
 	if ( ( xcr0 & b3_cpuid_avx256_saved ) == 0 )
 	{
@@ -130,7 +130,7 @@ static inline bool b3_supportsW8()
 	// ECX for EAX=0x7
 	eax = 0x7;
 	ecx = 0x0;
-	b3_cpuid( &eax, &ebx, &ecx, &edx );
+	b3Cpuid( &eax, &ebx, &ecx, &edx );
 	bool supportsAVX2 = ( ebx & b3_cpuid_avx2_bit ) != 0;
 
 	return supportsAVX2;
@@ -138,7 +138,7 @@ static inline bool b3_supportsW8()
 
 #else
 
-static inline bool b3_supportsW8()
+static inline bool b3SupportsW8( void )
 {
 	return false;
 }

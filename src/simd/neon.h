@@ -380,7 +380,7 @@ B3_FORCE_INLINE bool b3OverlapAABBV( b3AABBV a, b3AABBV b )
 	return vminvq_u32( vorrq_u32( test, vld1q_u32( laneMask ) ) ) != 0;
 }
 
-B3_FORCE_INLINE bool b3OverlapNode4( b3AABBV av, const b3TreeNode* node )
+B3_FORCE_INLINE bool b3OverlapNode( b3AABBV av, const b3TreeNode* node )
 {
 	return b3OverlapAABBV( av, b3LoadAABBV( &node->aabb ) );
 }

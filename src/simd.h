@@ -35,10 +35,10 @@
 
 #endif
 
-static inline int b3_GetSIMDWidth()
+static inline int b3GetSIMDWidth( void )
 {
 #if defined( B3_SIMD_DYNAMIC_DISPATCH )
-	return b3_supportsW8() ? 8 : 4;
+	return b3SupportsW8() ? 8 : 4;
 #elif defined( B3_SIMD_HAS_WIDTH_8 )
 	return 8;
 #elif defined( B3_SIMD_HAS_WIDTH_4 )
