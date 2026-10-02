@@ -115,7 +115,7 @@ static inline bool b3SupportsW8( void )
 	}
 
 	// xgetbv for checking if the OS saves registers
-	uint64_t xcr0 = b3Getbv();
+	uint64_t xcr0 = b3XGetbv();
 
 	if ( ( xcr0 & b3_cpuid_avx256_saved ) == 0 )
 	{
