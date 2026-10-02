@@ -78,12 +78,14 @@ static inline void b3Cpuid( uint32_t* eax, uint32_t* ebx, uint32_t* ecx, uint32_
 	uint32_t level = *eax;
 	__get_cpuid( level, eax, ebx, ecx, edx );
 #else
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
 	uint32_t a = *eax, b, c = *ecx, d;
 	asm volatile( "cpuid\n\t" : "+a"( a ), "=b"( b ), "+c"( c ), "=d"( d ) );
 	*eax = a;
 	*ebx = b;
 	*ecx = c;
 	*edx = d;
+#pragma clang diagnostic warning "-Wlanguage-extension-token"
 #endif
 }
 
@@ -94,9 +96,11 @@ static inline uint64_t b3Xgetbv( void )
 #elif defined( __FILC__ )
 	return zxgetbv();
 #else
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
 	uint32_t xcr0_lo, xcr0_hi;
 	asm volatile( "xgetbv\n\t" : "=a"( xcr0_lo ), "=d"( xcr0_hi ) : "c"( 0 ) );
 	return xcr0_lo | ( ( (uint64_t)xcr0_hi ) << 32 );
+#pragma clang diagnostic warning "-Wlanguage-extension-token"
 #endif
 }
 
