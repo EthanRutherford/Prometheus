@@ -211,10 +211,9 @@ static void b3DestroyWorkerContexts( b3World* world )
 
 b3WorldId b3CreateWorld( const b3WorldDef* def )
 {
+	// Ensure SIMD shift is initialized, based on effective SIMD width
 	if ( b3_SIMDShift == -1 )
 	{
-		// it's fine that this might race on multiple threads, they'll all be racing to write the same value.
-		// worst case, the first few calls might do a tiny amount of redundant work.
 		b3_SIMDShift = b3GetSIMDWidth() == 4 ? 2 : 3; // Assuming SIMD width of 4 or 8, shift is log2(width)
 	}
 
