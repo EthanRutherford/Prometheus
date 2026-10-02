@@ -6,471 +6,6 @@
 #if defined( B3_SIMD_HAS_WIDTH_4 )
 #define B3_SIMD_WIDTH 4
 
-_Static_assert( B3_MAX_MANIFOLD_POINTS >= 4, "must be 4 or more" );
-
-#if B3_MAX_MANIFOLD_POINTS == 4
-
-// Reduce the manifold points to a maximum of 4 points.
-// Note: this modifies the input point array to improve performance
-static void b3ReduceManifoldPointsW4( b3LocalManifold* manifold, int capacity, b3LocalManifoldPoint* points, int count )
-{
-	if ( capacity < 4 )
-	{
-		return;
-	}
-
-	if ( count <= 4 )
-	{
-		for ( int i = 0; i < count; ++i )
-		{
-			manifold->points[i] = points[i];
-		}
-
-		manifold->pointCount = count;
-		return;
-	}
-
-	b3Vec3 normal = manifold->normal;
-	// float linearSlop = B3_LINEAR_SLOP;
-	float speculativeDistance = B3_SPECULATIVE_DISTANCE;
-	float tolSqr = speculativeDistance * speculativeDistance;
-
-	// This bias is very important for contact point consistency across time steps.
-	// It creates a pecking order to avoid flickering between candidates with similar scores.
-	float bias = 0.95f;
-
-	// Step 1: find extreme point that is touching
-	int bestIndex = B3_NULL_INDEX;
-	float bestScore = -FLT_MAX;
-
-	// Arbitrary tangent direction
-	// b3Vec3 perp1 = b3Perp( normal );
-	// b3Vec3 perp2 = b3Cross( perp1, normal );
-	// b3Vec3 searchDirection = -0.4535961214255773f * perp1 + 0.8912073600614354f * perp2;
-	b3Vec3 searchDirection = b3ArbitraryPerp( normal );
-	for ( int index = 0; index < count; ++index )
-	{
-		b3LocalManifoldPoint* pt = points + index;
-
-		if ( pt->separation > speculativeDistance )
-		{
-			continue;
-		}
-
-		// The deeper the better
-		float score = -pt->separation + b3Dot( searchDirection, pt->point );
-		if ( bias * score > bestScore )
-		{
-			bestIndex = index;
-			bestScore = score;
-		}
-	}
-
-	B3_VALIDATE( 0 <= bestIndex && bestIndex < count );
-	if ( bestIndex == B3_NULL_INDEX )
-	{
-		manifold->pointCount = 0;
-		return;
-	}
-
-	manifold->points[0] = points[bestIndex];
-	manifold->pointCount = 1;
-
-	// Remove best point from array
-	points[bestIndex] = points[count - 1];
-	count -= 1;
-
-	b3Vec3 a = manifold->points[0].point;
-
-	// Step 2: Find farthest point in 2D
-	bestScore = 0.0f;
-	bestIndex = B3_NULL_INDEX;
-
-	for ( int index = 0; index < count; ++index )
-	{
-		b3Vec3 p = points[index].point;
-		b3Vec3 d = b3Sub( p, a );
-		b3Vec3 v = b3MulSub( d, b3Dot( d, normal ), normal );
-		float distanceSquared = b3LengthSquared( v );
-		float separation = b3MaxFloat( 0.0f, -points[index].separation );
-		float score = distanceSquared + 4.0f * separation * separation;
-		if ( bias * score > bestScore )
-		{
-			bestScore = score;
-			bestIndex = index;
-		}
-	}
-
-	if ( bestScore < tolSqr )
-	{
-		return;
-	}
-
-	B3_ASSERT( 0 <= bestIndex && bestIndex < count );
-	manifold->points[1] = points[bestIndex];
-	manifold->pointCount = 2;
-
-	// Remove best point from array
-	points[bestIndex] = points[count - 1];
-	count -= 1;
-
-	b3Vec3 b = manifold->points[1].point;
-
-	// Step 3: Find the point with the maximum triangular area
-	bestScore = tolSqr;
-	bestIndex = B3_NULL_INDEX;
-	float bestSignedArea = 0.0f;
-	b3Vec3 ba = b3Sub( b, a );
-	for ( int index = 0; index < count; ++index )
-	{
-		b3Vec3 p = points[index].point;
-		float signedArea = b3Dot( normal, b3Cross( ba, b3Sub( p, a ) ) );
-		float score = b3AbsFloat( signedArea );
-		if ( bias * score >= bestScore )
-		{
-			bestScore = score;
-			bestIndex = index;
-			bestSignedArea = signedArea;
-		}
-	}
-
-	if ( bestIndex == B3_NULL_INDEX )
-	{
-		return;
-	}
-
-	B3_ASSERT( bestIndex != B3_NULL_INDEX );
-
-	manifold->points[2] = points[bestIndex];
-	manifold->pointCount = 3;
-	points[bestIndex] = points[count - 1];
-	count -= 1;
-
-	b3Vec3 c = manifold->points[2].point;
-
-	// Step 4: get the point that adds the most area outside the current triangle
-	bestScore = tolSqr;
-	bestIndex = B3_NULL_INDEX;
-	float sign = bestSignedArea < 0.0f ? -1.0f : 1.0f;
-	for ( int index = 0; index < count; ++index )
-	{
-		b3Vec3 p = points[index].point;
-		float u1 = sign * b3Dot( normal, b3Cross( b3Sub( p, a ), ba ) );
-		float u2 = sign * b3Dot( normal, b3Cross( b3Sub( p, b ), b3Sub( c, b ) ) );
-		float u3 = sign * b3Dot( normal, b3Cross( b3Sub( p, c ), b3Sub( a, c ) ) );
-		float score = b3MaxFloat( u1, b3MaxFloat( u2, u3 ) );
-
-		if ( bias * score > bestScore )
-		{
-			bestScore = score;
-			bestIndex = index;
-		}
-	}
-
-	if ( bestIndex != B3_NULL_INDEX )
-	{
-		manifold->points[manifold->pointCount] = points[bestIndex];
-		manifold->pointCount += 1;
-	}
-}
-
-#else
-
-static void b3ReduceManifoldPointsW4( b3LocalManifold* manifold, int capacity, b3LocalManifoldPoint* points, int count )
-{
-	if ( capacity < 4 )
-	{
-		return;
-	}
-
-	B3_ASSERT( count <= B3_MAX_CLIP_POINTS );
-
-	int target = b3MinInt( capacity, B3_MAX_MANIFOLD_POINTS );
-
-	if ( count <= target )
-	{
-		for ( int i = 0; i < count; ++i )
-		{
-			manifold->points[i] = points[i];
-		}
-
-		manifold->pointCount = count;
-		return;
-	}
-
-	b3Vec3 normal = manifold->normal;
-	b3Vec3 u = b3Perp( normal );
-	b3Vec3 v = b3Cross( normal, u );
-	b3Vec3 origin = points[0].point;
-
-	b3Point2D pts[B3_MAX_CLIP_POINTS];
-	for ( int i = 0; i < count; ++i )
-	{
-		b3Vec3 d = b3Sub( points[i].point, origin );
-		pts[i].p = (b3Vec2){ b3Dot( d, u ), b3Dot( d, v ) };
-		pts[i].separation = points[i].separation;
-		pts[i].originalIndex = i;
-	}
-
-	b3Point2D hull[2 * B3_MAX_CLIP_POINTS];
-	int hullCount = b3Hull2D( pts, count, hull );
-	int finalCount = b3SimplifyHull2D( hull, hullCount, target );
-	B3_ASSERT( 0 < finalCount && finalCount <= target );
-
-	for ( int i = 0; i < finalCount; ++i )
-	{
-		int index = hull[i].originalIndex;
-		B3_ASSERT( 0 <= index && index < count );
-		manifold->points[i] = points[index];
-	}
-
-	manifold->pointCount = finalCount;
-}
-
-#endif
-
-static int b3BuildPolygonW4( b3ClipVertex* out, b3Transform transform, const b3HullData* hull, int incFace, b3Plane refPlane )
-{
-	const b3HullFace* faces = b3GetHullFaces( hull );
-	const b3HullHalfEdge* edges = b3GetHullEdges( hull );
-	const b3Vec3* points = b3GetHullPoints( hull );
-
-	const b3HullFace* face = faces + incFace;
-	int edgeIndex = face->edge;
-	B3_ASSERT( edges[edgeIndex].face == incFace );
-
-	int outCount = 0;
-
-	b3Matrix3 matrix = b3MakeMatrixFromQuat( transform.q );
-
-	do
-	{
-		const b3HullHalfEdge* edge = edges + edgeIndex;
-
-		int nextEdgeIndex = edge->next;
-		const b3HullHalfEdge* next = edges + nextEdgeIndex;
-
-		b3ClipVertex vertex;
-		vertex.position = b3Add( b3MulMV( matrix, points[next->origin] ), transform.p );
-		vertex.separation = b3PlaneSeparation( refPlane, vertex.position );
-		vertex.pair = b3MakeFeaturePair( b3_featureShapeB, edgeIndex, b3_featureShapeB, nextEdgeIndex );
-
-		out[outCount] = vertex;
-		outCount += 1;
-
-		edgeIndex = nextEdgeIndex;
-	}
-	while ( edgeIndex != face->edge && outCount < B3_MAX_CLIP_POINTS );
-
-	B3_VALIDATE( b3ValidatePolygon( out, outCount ) );
-
-	return outCount;
-}
-
-static bool b3BuildFaceAContactW4( b3LocalManifold* manifold, int capacity, const b3HullData* hullA, const b3HullData* hullB,
-								   b3Transform transformBtoA, b3SeparatingAxis query, b3SATCache* cache )
-{
-	B3_ASSERT( capacity > 0 );
-	B3_VALIDATE( query.type == b3_faceAxisA );
-	B3_VALIDATE( 0 <= query.indexA && query.indexA < hullA->faceCount );
-	B3_VALIDATE( 0 <= query.indexB && query.indexB < hullB->vertexCount );
-
-	const b3HullFace* facesA = b3GetHullFaces( hullA );
-	const b3HullHalfEdge* edgesA = b3GetHullEdges( hullA );
-	const b3Plane* planesA = b3GetHullPlanes( hullA );
-	const b3Vec3* pointsA = b3GetHullPoints( hullA );
-
-	// Reference face
-	int refFace = query.indexA;
-	b3Plane refPlane = planesA[refFace];
-
-	// Find incident face
-	b3Vec3 refNormalInB = b3InvRotateVector( transformBtoA.q, refPlane.normal );
-	int incFace = b3FindIncidentFace( hullB, refNormalInB, query.indexB );
-
-	// Build clip polygon from incident face in frame A
-	b3ClipVertex buffer1[B3_MAX_CLIP_POINTS], buffer2[B3_MAX_CLIP_POINTS];
-	int pointCount = b3BuildPolygonW4( buffer1, transformBtoA, hullB, incFace, refPlane );
-
-	// Clip incident face against side planes of reference face
-	b3ClipVertex* input = buffer1;
-	b3ClipVertex* output = buffer2;
-
-	const b3HullFace* face = facesA + refFace;
-	int edgeIndex = face->edge;
-
-	do
-	{
-		const b3HullHalfEdge* edge = edgesA + edgeIndex;
-		int nextEdgeIndex = edge->next;
-		const b3HullHalfEdge* next = edgesA + nextEdgeIndex;
-		b3Vec3 vertex1 = pointsA[edge->origin];
-		b3Vec3 vertex2 = pointsA[next->origin];
-		b3Vec3 tangent = b3Normalize( b3Sub( vertex2, vertex1 ) );
-		b3Vec3 binormal = b3Cross( tangent, refPlane.normal );
-
-		b3Plane clipPlane = b3MakePlaneFromNormalAndPoint( binormal, vertex1 );
-
-		pointCount = b3ClipPolygon( output, input, pointCount, clipPlane, edgeIndex, refPlane );
-		B3_ASSERT( pointCount <= B3_MAX_CLIP_POINTS );
-
-		B3_SWAP( output, input );
-
-		if ( pointCount < 3 )
-		{
-			*cache = (b3SATCache){ 0 };
-			return false;
-		}
-
-		edgeIndex = nextEdgeIndex;
-	}
-	while ( edgeIndex != face->edge );
-
-	pointCount = b3MinInt( pointCount, B3_MAX_CLIP_POINTS );
-
-	b3LocalManifoldPoint points[B3_MAX_CLIP_POINTS];
-	float minSeparation = FLT_MAX;
-
-	manifold->normal = refPlane.normal;
-
-	for ( int i = 0; i < pointCount; ++i )
-	{
-		b3ClipVertex* clipPoint = input + i;
-		b3LocalManifoldPoint* pt = points + i;
-		*pt = (b3LocalManifoldPoint){ 0 };
-
-		// Using the half-way point keeps the points in the same position when swapping reference face from A to B.
-		b3Vec3 point = b3MulSub( clipPoint->position, 0.5f * clipPoint->separation, refPlane.normal );
-
-		// Old way of pushing onto the reference face.
-		// b3Vec3 point = clipPoint->position - clipPoint->separation * refPlane.normal;
-
-		pt->point = point;
-		pt->separation = clipPoint->separation;
-		pt->pair = clipPoint->pair;
-
-		minSeparation = b3MinFloat( minSeparation, clipPoint->separation );
-	}
-
-	if ( minSeparation >= B3_SPECULATIVE_DISTANCE )
-	{
-		*cache = (b3SATCache){ 0 };
-		return false;
-	}
-
-	b3ReduceManifoldPointsW4( manifold, capacity, points, pointCount );
-
-	// Save cache
-	cache->separation = minSeparation;
-	cache->type = (uint8_t)b3_faceAxisA;
-	cache->indexA = (uint8_t)query.indexA;
-	cache->indexB = (uint8_t)query.indexB;
-
-	return true;
-}
-
-static bool b3BuildFaceBContactW4( b3LocalManifold* manifold, int capacity, const b3HullData* hullA, const b3HullData* hullB,
-								   b3Transform transformBtoA, b3SeparatingAxis query, b3SATCache* cache )
-{
-	B3_VALIDATE( query.type == b3_faceAxisB );
-
-	b3Transform transformAtoB = b3InvertTransform( transformBtoA );
-	b3SeparatingAxis flippedQuery = {
-		.normal = b3Neg( query.normal ),
-		.separation = query.separation,
-		.indexA = query.indexB,
-		.indexB = query.indexA,
-		.type = b3_faceAxisA,
-	};
-
-	bool touching = b3BuildFaceAContactW4( manifold, capacity, hullB, hullA, transformAtoB, flippedQuery, cache );
-	if ( touching == false )
-	{
-		*cache = (b3SATCache){ 0 };
-		return false;
-	}
-
-	// Results are in frame B, need to transform them into frame A
-	b3Matrix3 matrix = b3MakeMatrixFromQuat( transformBtoA.q );
-
-	// Transform and flip normal so it points from A to B, even though the B has the reference face.
-	manifold->normal = b3Neg( b3MulMV( matrix, manifold->normal ) );
-
-	// Transform points from frame B to frame A.
-	// Also flip the pairs to ensure correct matches.
-	for ( int i = 0; i < manifold->pointCount; ++i )
-	{
-		b3LocalManifoldPoint* pt = manifold->points + i;
-		pt->point = b3Add( b3MulMV( matrix, pt->point ), transformBtoA.p );
-		pt->pair = b3FlipPair( pt->pair );
-	}
-
-	cache->type = (uint8_t)b3_faceAxisB;
-	cache->indexA = (uint8_t)query.indexA;
-	cache->indexB = (uint8_t)query.indexB;
-
-	return true;
-}
-
-static bool b3BuildEdgeContactW4( b3LocalManifold* manifold, const b3HullData* hullA, const b3HullData* hullB,
-								  b3Transform transformBtoA, b3SeparatingAxis query, b3SATCache* cache )
-{
-	B3_VALIDATE( query.type == b3_edgePairAxis );
-	B3_VALIDATE( 0 <= query.indexA && query.indexA < hullA->edgeCount );
-	B3_VALIDATE( 0 <= query.indexB && query.indexB < hullB->edgeCount );
-
-	// Work in shapeA coordinates
-	const b3HullHalfEdge* edgesA = b3GetHullEdges( hullA );
-	const b3Vec3* pointsA = b3GetHullPoints( hullA );
-
-	const b3HullHalfEdge* edgesB = b3GetHullEdges( hullB );
-	const b3Vec3* pointsB = b3GetHullPoints( hullB );
-
-	// B3_VALIDATE( query.separation <= 2.0f * B3_SPECULATIVE_DISTANCE );
-
-	const b3HullHalfEdge* edgeA = edgesA + query.indexA;
-	const b3HullHalfEdge* twinA = edgesA + edgeA->twin;
-	b3Vec3 pA = pointsA[edgeA->origin];
-	b3Vec3 qA = pointsA[twinA->origin];
-	b3Vec3 eA = b3Sub( qA, pA );
-
-	const b3HullHalfEdge* edgeB = edgesB + query.indexB;
-	const b3HullHalfEdge* twinB = edgesB + edgeB->twin;
-	b3Vec3 pB = b3TransformPoint( transformBtoA, pointsB[edgeB->origin] );
-	b3Vec3 qB = b3TransformPoint( transformBtoA, pointsB[twinB->origin] );
-	b3Vec3 eB = b3Sub( qB, pB );
-
-	b3Vec3 normal = query.normal;
-	b3SegmentDistanceResult result = b3LineDistance( pA, eA, pB, eB );
-
-	if ( b3IsWithinSegments( &result ) == false )
-	{
-		*cache = (b3SATCache){ 0 };
-		return false;
-	}
-
-	// This can slide off the end from caching
-	float separation = b3Dot( normal, b3Sub( result.point2, result.point1 ) );
-	b3Vec3 point = b3MulSV( 0.5f, b3Add( result.point1, result.point2 ) );
-
-	// Result in frame A
-	manifold->normal = normal;
-	manifold->pointCount = 1;
-
-	b3LocalManifoldPoint* pt = manifold->points + 0;
-	pt->point = point;
-	pt->separation = separation;
-	pt->pair = b3MakeFeaturePair( b3_featureShapeA, query.indexA, b3_featureShapeB, query.indexB );
-
-	// Save cache
-	cache->separation = separation;
-	cache->type = (uint8_t)b3_edgePairAxis;
-	cache->indexA = (uint8_t)query.indexA;
-	cache->indexB = (uint8_t)query.indexB;
-
-	return true;
-}
-
 // Transform a SoA point/normal stream (already split into X/Y/Z) by out = -(R*v (+t)).
 // The inputs come straight from the hull's stored SoA arrays, so there's no transpose here.
 static inline void b3NegativeTransformFromSoAW4( b3Matrix3 R, b3Vec3 p, const float* inX, const float* inY, const float* inZ,
@@ -1249,7 +784,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 			faceQuery.type = b3_faceAxisA;
 
 			b3SATCache localCache = { 0 };
-			bool touching = b3BuildFaceAContactW4( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, &localCache );
+			bool touching = b3BuildFaceAContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, &localCache );
 			if ( touching == true && b3AbsFloat( cache->separation - localCache.separation ) < linearSlop )
 			{
 				// Cache hit, contact points generated
@@ -1288,7 +823,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 			faceQuery.type = b3_faceAxisB;
 
 			b3SATCache localCache = { 0 };
-			bool touching = b3BuildFaceBContactW4( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, &localCache );
+			bool touching = b3BuildFaceBContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, &localCache );
 			if ( touching == true && b3AbsFloat( cache->separation - localCache.separation ) < linearSlop )
 			{
 				// Cache hit, contact points generated
@@ -1362,7 +897,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 					edgeQuery.type = b3_edgePairAxis;
 
 					b3SATCache localCache = { 0 };
-					bool touching = b3BuildEdgeContactW4( manifold, hullA, hullB, transformBtoA, edgeQuery, &localCache );
+					bool touching = b3BuildEdgeContact( manifold, hullA, hullB, transformBtoA, edgeQuery, &localCache );
 
 					// This separation tolerance may have a big impact on performance in some benchmarks.
 					if ( touching && b3AbsFloat( cache->separation - localCache.separation ) < linearSlop )
@@ -1381,7 +916,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 		{
 			b3AxisQuery axisQuery = b3ComputeSeparatingAxisW4( hullA, hullB, transformBtoA, false );
 			b3SeparatingAxis faceQuery = axisQuery.faceA;
-			b3BuildFaceAContactW4( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
+			b3BuildFaceAContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
 			return;
 		}
 
@@ -1390,7 +925,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 		{
 			b3AxisQuery axisQuery = b3ComputeSeparatingAxisW4( hullA, hullB, transformBtoA, false );
 			b3SeparatingAxis faceQuery = axisQuery.faceB;
-			b3BuildFaceBContactW4( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
+			b3BuildFaceBContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
 			return;
 		}
 
@@ -1401,7 +936,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 			b3SeparatingAxis edgeQuery = axisQuery.edge;
 			if ( edgeQuery.indexA != B3_NULL_INDEX )
 			{
-				b3BuildEdgeContactW4( manifold, hullA, hullB, transformBtoA, edgeQuery, cache );
+				b3BuildEdgeContact( manifold, hullA, hullB, transformBtoA, edgeQuery, cache );
 			}
 			return;
 		}
@@ -1456,7 +991,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 		B3_VALIDATE( 0 <= faceQuery.indexB && faceQuery.indexB < hullB->vertexCount );
 
 		// Face contact A
-		b3BuildFaceAContactW4( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
+		b3BuildFaceAContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
 
 		B3_VALIDATE( cache->indexA < hullA->faceCount );
 		B3_VALIDATE( cache->indexB < hullB->vertexCount );
@@ -1468,7 +1003,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 		B3_VALIDATE( 0 <= faceQuery.indexB && faceQuery.indexB < hullB->faceCount );
 
 		// Face contact B
-		b3BuildFaceBContactW4( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
+		b3BuildFaceBContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
 
 		B3_VALIDATE( cache->indexA < hullA->vertexCount );
 		B3_VALIDATE( cache->indexB < hullB->faceCount );
@@ -1502,7 +1037,7 @@ void b3CollideHullsW4( b3LocalManifold* manifold, int capacity, const b3HullData
 		edgeManifold.points = &edgePoint;
 
 		b3SATCache edgeCache = { 0 };
-		b3BuildEdgeContactW4( &edgeManifold, hullA, hullB, transformBtoA, edgeQuery, &edgeCache );
+		b3BuildEdgeContact( &edgeManifold, hullA, hullB, transformBtoA, edgeQuery, &edgeCache );
 
 		// It is possible with speculation to have vertex-vertex collision that is missed by SAT,
 		// so edge contact yields no points. In that case perhaps the face contact has some points.

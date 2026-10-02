@@ -68,14 +68,14 @@
 			//#pragma message("B3_SIMD_DYNAMIC_DISPATCH")
 		#endif
 	#elif defined( B3_CPU_ARM )
-	// ARMv7 Neon doesn't have divide or sqrt so cannot be used.
-	#if defined( __aarch64__ ) || defined( _M_ARM64 )
-		#define B3_SIMD_NEON
-		#define B3_SIMD_HAS_WIDTH_4
-	#else
-		#define B3_SIMD_NONE
-		#define B3_SIMD_HAS_WIDTH_4
-	#endif
+		// ARMv7 Neon doesn't have divide or sqrt so cannot be used.
+		#if defined( __aarch64__ ) || defined( _M_ARM64 )
+			#define B3_SIMD_NEON
+			#define B3_SIMD_HAS_WIDTH_4
+		#else
+			#define B3_SIMD_NONE
+			#define B3_SIMD_HAS_WIDTH_4
+		#endif
 		//#pragma message("B3_SIMD_NEON")
 	#elif defined( B3_CPU_WASM )
 		#define B3_SIMD_SSE2

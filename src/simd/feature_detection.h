@@ -55,11 +55,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #if defined( __linux__ )
 #include <sys/auxv.h>
 #endif
-#if defined( _WIN32 ) && !defined( _WINDOWS_ )
-// We avoid including <windows.h> (macro pollution); this matches the
-// declaration in the Windows SDK (BOOL WINAPI IsProcessorFeaturePresent(DWORD)).
-extern int __stdcall IsProcessorFeaturePresent( unsigned long ProcessorFeature );
-#endif
 #ifdef __FILC__
 #include <stdfil.h>
 #endif
