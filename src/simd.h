@@ -132,7 +132,7 @@ static inline b3Vec3W4 b3CrossW4( b3Vec3W4 a, b3Vec3W4 b )
 
 #endif
 
-#if defined ( B3_SIMD_HAS_WIDTH_8 )
+#if defined( B3_SIMD_AVX2 )
 
 // Wide vec3
 typedef struct b3Vec3W8
