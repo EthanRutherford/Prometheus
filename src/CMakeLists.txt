@@ -216,6 +216,10 @@ if (MSVC)
 		target_compile_options(box3d PRIVATE -Wmissing-prototypes)
 	endif()
 
+	if (BOX3D_AVX2 AND NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_ARCHITECTURE_ID MATCHES "^(x64|X86)$")
+		set_source_files_properties(contact_solver_w8.c convex_manifold_w8.c PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
+	endif()
+
 elseif (MINGW)
 	message(STATUS "Box3D on MinGW")
 elseif (APPLE)
