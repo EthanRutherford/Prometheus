@@ -3,6 +3,7 @@
 
 #include "box3d/box3d.h"
 #include "determinism.h"
+#include "simd.h"
 #include "stability.h"
 #include "test_macros.h"
 
@@ -331,6 +332,44 @@ static int MeshDropTest( void )
 	return 0;
 }
 
+typedef int SceneFcn( int workerCount, DeterminismResult* reference );
+
+static int RunSceneAtWidth( SceneFcn* scene, int width, DeterminismResult* result )
+{
+	b3SetSIMDWidth( width );
+	int status = scene( 1, result );
+	b3SetSIMDWidth( 0 );
+	return status;
+}
+
+// Width 4 and the native width must produce bitwise identical simulations.
+static int SIMDWidthTest( void )
+{
+	b3SetSIMDWidth( 0 );
+	int nativeWidth = b3GetSIMDWidth();
+
+	SceneFcn* scenes[4] = { SingleMultithreadingTest, SingleWavePileTest, SingleQuerySpawnTest, SingleMeshDropTest };
+
+	for ( int i = 0; i < 4; ++i )
+	{
+		DeterminismResult narrow = { 0 };
+		DeterminismResult wide = { 0 };
+
+		int narrowStatus = RunSceneAtWidth( scenes[i], 4, &narrow );
+		int wideStatus = RunSceneAtWidth( scenes[i], nativeWidth, &wide );
+
+		ENSURE( narrowStatus == 0 );
+		ENSURE( wideStatus == 0 );
+		ENSURE( narrow.seeded && wide.seeded );
+		ENSURE( narrow.sleepStep == wide.sleepStep );
+		ENSURE( narrow.hash == wide.hash );
+		ENSURE( narrow.queryHitCount == wide.queryHitCount );
+		ENSURE( narrow.queryHash == wide.queryHash );
+	}
+
+	return 0;
+}
+
 int DeterminismTest( void )
 {
 	RUN_SUBTEST( MultithreadingTest );
@@ -338,6 +377,7 @@ int DeterminismTest( void )
 	RUN_SUBTEST( WavePileTest );
 	RUN_SUBTEST( QuerySpawnTest );
 	RUN_SUBTEST( MeshDropTest );
+	RUN_SUBTEST( SIMDWidthTest );
 
 	return 0;
 }
