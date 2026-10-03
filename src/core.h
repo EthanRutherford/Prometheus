@@ -55,12 +55,13 @@
 	#if defined( B3_CPU_X86_X64 )
 		#define B3_SIMD_SSE2
 		#define B3_SIMD_HAS_WIDTH_4
-		#if defined( __AVX2__ ) || defined( BOX3D_FORCE_AVX2 )
+		#if defined( BOX3D_FORCE_SSE2 )
+		#elif defined( __AVX2__ ) || defined( BOX3D_FORCE_AVX2 ) || ( defined( B3_SIMD_WIDTH ) && B3_SIMD_WIDTH == 8 )
 			// if AVX2 is specifically requested, compile with static AVX2 support
 			#define B3_SIMD_AVX2
 			#define B3_SIMD_HAS_WIDTH_8
 			//#pragma message("B3_SIMD_AVX2")
-		#elif !defined( BOX3D_FORCE_SSE2 )
+		#else
 			// unless SSE2 is specifically forced, use dynamic dispatch for x86 SIMD
 			#define B3_SIMD_HAS_WIDTH_8
 			#define B3_SIMD_DYNAMIC_DISPATCH
@@ -89,6 +90,17 @@
 
 #if !defined( B3_SIMD_NONE )
 	#define B3_SIMD_ENABLED
+#endif
+
+#if defined( B3_SIMD_AVX2 ) && defined( __clang__ )
+	#define B3_AVX2_BEGIN _Pragma( "clang attribute push( __attribute__( ( target( \"avx2\" ) ) ), apply_to = function )" )
+	#define B3_AVX2_END _Pragma( "clang attribute pop" )
+#elif defined( B3_SIMD_AVX2 ) && defined( __GNUC__ )
+	#define B3_AVX2_BEGIN _Pragma( "GCC push_options" ) _Pragma( "GCC target( \"avx2\" )" )
+	#define B3_AVX2_END _Pragma( "GCC pop_options" )
+#else
+	#define B3_AVX2_BEGIN
+	#define B3_AVX2_END
 #endif
 
 // Define compiler

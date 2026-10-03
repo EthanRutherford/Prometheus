@@ -119,11 +119,6 @@ set(BOX3D_INCLUDE_FILES
 	../include/box3d/types.h
 )
 
-set(BOX3D_AVX2_SOURCE_FILES
-	contact_solver_w8.c
-	convex_manifold_w8.c
-)
-
 # Hide internal functions
 # https://gcc.gnu.org/wiki/Visibility
 set(CMAKE_C_VISIBILITY_PRESET hidden)
@@ -240,14 +235,6 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "src" FILES ${BOX3D_SOURC
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/../include" PREFIX "include" FILES ${BOX3D_INCLUDE_FILES})
 
 add_library(box3d::box3d ALIAS box3d)
-
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|AMD64|x86_64|i386|i686")
-	if(MSVC)
-		set_source_files_properties(${BOX3D_AVX2_SOURCE_FILES} PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
-	else()
-		set_source_files_properties(${BOX3D_AVX2_SOURCE_FILES} PROPERTIES COMPILE_OPTIONS "-mavx2")
-	endif()
-endif()
 
 # libm is required on many Unix toolchains for sqrtf, etc.
 if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
