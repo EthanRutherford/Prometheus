@@ -29,11 +29,13 @@ set(BOX3D_SOURCE_FILES
 	contact.h
 	contact_solver_w4.c
 	contact_solver_w8.c
+	contact_solver_wide.inl
 	contact_solver.c
 	contact_solver.h
 	container.h
 	convex_manifold_w4.c
 	convex_manifold_w8.c
+	convex_manifold_wide.inl
 	convex_manifold.c
 	convex_manifold.h
 	core.c
@@ -87,6 +89,7 @@ set(BOX3D_SOURCE_FILES
 	shape.h
 	simd.c
 	simd.h
+	simd_wide.h
 	solver.c
 	solver.h
 	solver_set.c
