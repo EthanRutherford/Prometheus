@@ -2019,7 +2019,7 @@ typedef struct b3HullFace
 } b3HullFace;
 
 /// 64-bit hull version. Useful for validating serialized data.
-#define B3_HULL_VERSION 0x9D3E61B7C2A4F085ull
+#define B3_HULL_VERSION 0x6B1E39D4A87C25F3ull
 
 /// A convex hull.
 /// @note This data structure has data hanging off the end and cannot be directly copied.

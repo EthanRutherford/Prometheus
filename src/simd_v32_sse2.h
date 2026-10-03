@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Erin Catto
+// SPDX-License-Identifier: MIT
+
 #pragma once
 
 // this file contains SIMD definitions for operations where a wide register is

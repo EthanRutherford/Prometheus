@@ -1,12 +1,6 @@
 include(GNUInstallDirs)
 
 set(BOX3D_SOURCE_FILES
-	simd/avx2.h
-	simd/feature_detection.h
-	simd/neon.h
-	simd/scalar.h
-	simd/sse.h
-	simd/x86_common.h
 	aabb.c
 	aabb.h
 	algorithm.h
@@ -89,6 +83,12 @@ set(BOX3D_SOURCE_FILES
 	shape.h
 	simd.c
 	simd.h
+	simd_avx2.h
+	simd_neon.h
+	simd_scalar.h
+	simd_sse2.h
+	simd_v32_scalar.h
+	simd_v32_sse2.h
 	simd_wide.h
 	solver.c
 	solver.h
@@ -179,6 +179,11 @@ endif()
 if (BOX3D_DISABLE_SIMD)
 	message(STATUS "Box3D SIMD disabled")
 	target_compile_definitions(box3d PRIVATE BOX3D_DISABLE_SIMD)
+endif()
+
+if (NOT BOX3D_AVX2)
+	message(STATUS "Box3D AVX2 disabled")
+	target_compile_definitions(box3d PRIVATE BOX3D_DISABLE_AVX2)
 endif()
 
 if (BOX3D_DOUBLE_PRECISION)

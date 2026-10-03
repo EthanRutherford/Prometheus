@@ -12,29 +12,27 @@
 #if defined( B3_SIMD_ENABLED )
 
 #if defined( B3_SIMD_NEON )
-#include "simd/neon.h"
+#include "simd_neon.h"
 #endif
 
 #if defined( B3_SIMD_SSE2 )
-#include "simd/sse.h"
-#include "simd/x86_common.h"
+#include "simd_sse2.h"
+#include "simd_v32_sse2.h"
 #endif
 
 #if defined( B3_SIMD_AVX2 )
-#include "simd/avx2.h"
-#include "simd/x86_common.h"
+#include "simd_avx2.h"
+#include "simd_v32_sse2.h"
 #endif
 
 #else
 
-#include "simd/scalar.h"
+#include "simd_scalar.h"
 
 #endif
 
 int b3GetSIMDWidth( void );
 void b3SetSIMDWidth( int width );
-
-#if defined ( B3_SIMD_HAS_WIDTH_4 )
 
 // Wide vec3
 typedef struct b3Vec3W4
@@ -115,8 +113,6 @@ static inline b3Vec3W4 b3CrossW4( b3Vec3W4 a, b3Vec3W4 b )
 	c.Z = b3SubW4( b3MulW4( a.X, b.Y ), b3MulW4( a.Y, b.X ) );
 	return c;
 }
-
-#endif
 
 #if defined( B3_SIMD_AVX2 )
 
