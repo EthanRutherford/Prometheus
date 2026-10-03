@@ -76,7 +76,6 @@ void b3SolveContacts_Convex( b3SolverBlock block, b3StepContext* context );
 void b3ApplyRestitution_Convex( b3SolverBlock block, b3StepContext* context );
 void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int workerIndex );
 
-// SIMD declarations
 void b3PrepareContacts_ConvexW4( b3SolverBlock block, b3StepContext* context );
 void b3WarmStartContacts_ConvexW4( b3SolverBlock block, b3StepContext* context );
 void b3PushContacts_ConvexW4( b3SolverBlock block, b3StepContext* context );

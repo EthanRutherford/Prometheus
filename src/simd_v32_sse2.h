@@ -162,7 +162,6 @@ static inline bool b3AllLessEq3V( b3V32 a, b3V32 b )
 	return ( _mm_movemask_ps( v ) & 0x07 ) == 0x07;
 }
 
-
 typedef struct b3AABBV
 {
 	__m128 lower;

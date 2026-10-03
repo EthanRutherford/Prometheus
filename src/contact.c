@@ -530,7 +530,7 @@ static bool b3ComputeConvexManifold( b3World* world, int workerIndex, b3Contact*
 		{
 			B3_ASSERT( typeB == b3_hullShape );
 			b3CollideHullsAtWidth( &geomManifold, pointCapacity, shapeA->hull, shapeB->hull, transformBtoA, &cache->satCache,
-								  world->simdWidth );
+								   world->simdWidth );
 			world->taskContexts.data[workerIndex].satCallCount += 1;
 			world->taskContexts.data[workerIndex].satCacheHitCount += cache->satCache.hit;
 		}

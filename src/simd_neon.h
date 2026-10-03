@@ -257,8 +257,8 @@ B3_FORCE_INLINE void b3StoreAABBV( b3AABB* aabb, b3AABBV value, bool condition )
 	vst1q_f32( base + 2, vbslq_f32( mask, raw1, vld1q_f32( base + 2 ) ) );
 }
 
-B3_FORCE_INLINE void b3TransposeW4( b3FloatW4 r0, b3FloatW4 r1, b3FloatW4 r2, b3FloatW4 r3, b3FloatW4* c0,
-								   b3FloatW4* c1, b3FloatW4* c2, b3FloatW4* c3 )
+B3_FORCE_INLINE void b3TransposeW4( b3FloatW4 r0, b3FloatW4 r1, b3FloatW4 r2, b3FloatW4 r3, b3FloatW4* c0, b3FloatW4* c1,
+									b3FloatW4* c2, b3FloatW4* c3 )
 {
 	b3FloatW4 t0 = vzip1q_f32( r0, r2 );
 	b3FloatW4 t1 = vzip1q_f32( r1, r3 );

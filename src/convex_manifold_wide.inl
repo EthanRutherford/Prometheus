@@ -43,7 +43,8 @@ _Static_assert( B3_MAX_HULL_VERTICES == 128, "must be 128" );
 
 #define B3_HULL_BIT_COUNT 7
 
-// SIMD support point calculation using a SoA vertex array padded to a multiple of 8.
+// SIMD support point calculation using a SoA vertex array padded with repeats of the first vertex
+// to a multiple of 8.
 //
 // This minimizes (bias - dot), where the caller is expected to provide a bias that makes this always positive.
 // It can be direction dependent. The bias should be just big enough to ensure the value is positive because
@@ -239,7 +240,7 @@ static inline int b3FilterEdgeCandidates( const b3HullData* hull, const float* p
 #define NV ( B3_MAX_HULL_VERTICES + B3_SIMD_WIDTH )
 
 // SIMD separating axis test based on an implementation developed by Cairn Overturf.
-// See his article: https://cairno.substack.com/p/improvements-to-the-separating-axis
+// See his article: https://cairnc.github.io/posts/improvements-to-the-separating-axis/
 b3AxisQuery B3_WIDE( b3ComputeSeparatingAxis )( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB,
 												bool earlyReturn )
 {
@@ -762,7 +763,7 @@ b3AxisQuery B3_WIDE( b3ComputeSeparatingAxis )( const b3HullData* hullA, const b
 			support = b3BlendW( INF, support, mask );
 			b3FloatW separation = b3NegW( support );
 
-			// Test all B3_SIMD_WIDTH supports against the running best at once. If none beats it, skip the
+			// Test all supports against the running best at once. If none beats it, skip the
 			// store and scalar reduction.
 			b3FloatW improves = b3GreaterThanW( separation, b3SplatW( res.edge.separation ) );
 			if ( b3AnyTrueW( improves ) == false )
