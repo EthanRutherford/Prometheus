@@ -10,14 +10,55 @@
 
 #include <imgui.h>
 
-// Trackball about the camera axes so the near side of the shape follows the cursor regardless of the
-// shape or camera orientation. A drag across the window height is a full turn.
-static b3Quat DragRotation( const Camera* camera, b3Quat q, float dx, float dy )
+#include <ImGuizmo.h>
+
+static void DrawGizmoControls( bool* show, bool* local )
 {
-	float scale = 2.0f * B3_PI / b3MaxFloat( (float)camera->m_height, 1.0f );
-	b3Quat yaw = b3MakeQuatFromAxisAngle( camera->GetUp(), scale * dx );
-	b3Quat pitch = b3MakeQuatFromAxisAngle( camera->GetRight(), scale * dy );
-	return b3NormalizeQuat( b3MulQuat( b3MulQuat( pitch, yaw ), q ) );
+	ImGui::Checkbox( "Gizmo (G)", show );
+	ImGui::Checkbox( "Local axes", local );
+}
+
+// Must run inside the ImGui frame. The view is eye relative, so the shape is placed against the draw origin.
+static void DrawTransformGizmo( const Camera* camera, b3WorldTransform* transform, bool local )
+{
+	ImGuizmo::BeginFrame();
+
+	// Behind the panels like the in-world labels
+	ImGuizmo::SetDrawlist( ImGui::GetBackgroundDrawList() );
+
+	ImGuiViewport* viewport = ImGui::GetMainViewport();
+	ImGuizmo::SetRect( viewport->Pos.x, viewport->Pos.y, viewport->Size.x, viewport->Size.y );
+	ImGuizmo::SetOrthographic( false );
+
+	// Alt drag orbits the camera
+	ImGuizmo::Enable( ImGui::GetIO().KeyAlt == false );
+
+	ImGuizmo::OPERATION operation = ImGuizmo::TRANSLATE | ImGuizmo::ROTATE;
+
+	b3Pos origin = GetDrawOrigin();
+	b3Vec3 offset = b3SubPos( transform->p, origin );
+	b3Matrix3 r = b3MakeMatrixFromQuat( transform->q );
+	Mat4 matrix = {
+		{ r.cx.x, r.cx.y, r.cx.z, 0.0f },
+		{ r.cy.x, r.cy.y, r.cy.z, 0.0f },
+		{ r.cz.x, r.cz.y, r.cz.z, 0.0f },
+		{ offset.x, offset.y, offset.z, 1.0f },
+	};
+
+	Mat4 view = camera->View();
+	Mat4 proj = camera->Proj();
+	ImGuizmo::MODE space = local ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+	if ( ImGuizmo::Manipulate( &view.cx.x, &proj.cx.x, operation, space, &matrix.cx.x ) )
+	{
+		// Rotation drags accumulate in the matrix, the quaternion keeps it orthonormal
+		b3Matrix3 m = {
+			{ matrix.cx.x, matrix.cx.y, matrix.cx.z },
+			{ matrix.cy.x, matrix.cy.y, matrix.cy.z },
+			{ matrix.cz.x, matrix.cz.y, matrix.cz.z },
+		};
+		transform->q = b3NormalizeQuat( b3MakeQuatFromMatrix( &m ) );
+		transform->p = b3OffsetPos( origin, { matrix.cw.x, matrix.cw.y, matrix.cw.z } );
+	}
 }
 
 class Manifold : public Sample
@@ -48,22 +89,18 @@ public:
 		m_simplexCache = {};
 		m_satCache = {};
 		m_manualFeature = 0;
-		m_baseTranslation = b3Pos_zero;
-		m_lastX = 0.0f;
-		m_lastY = 0.0f;
-		m_origin = b3Pos_zero;
 		m_drawPoints = true;
 		m_useCache = false;
-		m_tracking = false;
-		m_rotating = false;
+		m_showGizmo = true;
+		m_gizmoLocal = false;
 	}
 
 	void Render() override
 	{
-		DrawTextLine( "origin: %g %g %g", m_origin.x, m_origin.y, m_origin.z );
 		DrawTextLine( "count = %d", m_manifold.pointCount );
 
 		DrawAxes( b3WorldTransform_identity, 0.5f );
+		DrawGroundGrid( 80 );
 
 		if ( m_manifold.pointCount == 0 || m_drawPoints == false )
 		{
@@ -118,51 +155,30 @@ public:
 		}
 
 		ImGui::Checkbox( "Draw Points", &m_drawPoints );
+		DrawGizmoControls( &m_showGizmo, &m_gizmoLocal );
 
 		return true;
 	}
 
+	void Keyboard( int key, int action, int modifiers ) override
+	{
+		if ( key == KEY_G && action == ACTION_PRESS && modifiers == 0 )
+		{
+			m_showGizmo = !m_showGizmo;
+		}
+	}
+
+	void DrawSampleWindows() override
+	{
+		if ( m_showGizmo )
+		{
+			DrawTransformGizmo( m_camera, &m_transformB, m_gizmoLocal );
+		}
+	}
+
+	// The gizmo moves the shape, so keep the picking in Sample off
 	void MouseDown( b3Vec2 p, int button, int modifiers ) override
 	{
-		if ( button == 0 && ( modifiers & MOD_ALT ) == 0 )
-		{
-			if ( modifiers & MOD_SHIFT )
-			{
-				m_lastX = p.x;
-				m_lastY = p.y;
-				m_rotating = true;
-			}
-			else
-			{
-				PickRay pickRay = m_camera->BuildPickRay( p.x, p.y );
-				m_origin = pickRay.origin + 10.0f * b3Normalize( pickRay.translation );
-				m_baseTranslation = m_transformB.p;
-				m_tracking = true;
-			}
-		}
-	}
-
-	void MouseUp( b3Vec2 p, int button ) override
-	{
-		m_tracking = false;
-		m_rotating = false;
-	}
-
-	void MouseMove( b3Vec2 p ) override
-	{
-		if ( m_tracking )
-		{
-			PickRay pickRay = m_camera->BuildPickRay( p.x, p.y );
-			b3Pos origin = pickRay.origin + 10.0f * b3Normalize( pickRay.translation );
-			m_transformB.p = m_baseTranslation + b3SubPos( origin, m_origin );
-		}
-
-		if ( m_rotating )
-		{
-			m_transformB.q = DragRotation( m_camera, m_transformB.q, p.x - m_lastX, p.y - m_lastY );
-			m_lastX = p.x;
-			m_lastY = p.y;
-		}
 	}
 
 	static constexpr int m_pointCapacity = 64;
@@ -170,17 +186,13 @@ public:
 	b3LocalManifoldPoint m_points[m_pointCapacity];
 	b3WorldTransform m_transformA;
 	b3WorldTransform m_transformB;
-	b3Pos m_baseTranslation;
-	b3Pos m_origin;
 	b3SimplexCache m_simplexCache;
 	b3SATCache m_satCache;
 	int m_manualFeature;
-	float m_lastX;
-	float m_lastY;
 	bool m_useCache;
-	bool m_tracking;
-	bool m_rotating;
 	bool m_drawPoints;
+	bool m_showGizmo;
+	bool m_gizmoLocal;
 };
 
 class TriangleManifold : public Sample
@@ -210,25 +222,21 @@ public:
 
 		m_simplexCache = {};
 		m_satCache = {};
-		m_baseTranslation = b3Pos_zero;
-		m_lastX = 0.0f;
-		m_lastY = 0.0f;
-		m_origin = b3Pos_zero;
 		m_useCache = false;
-		m_tracking = false;
-		m_rotating = false;
 
 		m_manualFeature = 0;
+		m_showGizmo = true;
+		m_gizmoLocal = false;
 	}
 
 	void Render() override
 	{
-		DrawTextLine( "origin: %g %g %g", m_origin.x, m_origin.y, m_origin.z );
 		DrawTextLine( "count = %d", m_manifold.pointCount );
 		DrawTextLine( "feature = %d", m_manifold.feature );
 		DrawTextLine( "cache hit = %d", m_satCache.hit );
 
 		DrawAxes( b3WorldTransform_identity, 1.0f );
+		DrawGroundGrid( 10 );
 
 		if ( m_manifold.pointCount > 0 )
 		{
@@ -291,50 +299,30 @@ public:
 			ImGui::RadioButton( "edgePair", &m_manualFeature, 3 );
 		}
 
+		DrawGizmoControls( &m_showGizmo, &m_gizmoLocal );
+
 		return true;
 	}
 
+	void Keyboard( int key, int action, int modifiers ) override
+	{
+		if ( key == KEY_G && action == ACTION_PRESS && modifiers == 0 )
+		{
+			m_showGizmo = !m_showGizmo;
+		}
+	}
+
+	void DrawSampleWindows() override
+	{
+		if ( m_showGizmo )
+		{
+			DrawTransformGizmo( m_camera, &m_transformB, m_gizmoLocal );
+		}
+	}
+
+	// The gizmo moves the shape, so keep the picking in Sample off
 	void MouseDown( b3Vec2 p, int button, int modifiers ) override
 	{
-		if ( button == 0 && ( modifiers & MOD_ALT ) == 0 )
-		{
-			if ( modifiers & MOD_SHIFT )
-			{
-				m_lastX = p.x;
-				m_lastY = p.y;
-				m_rotating = true;
-			}
-			else
-			{
-				PickRay pickRay = m_camera->BuildPickRay( p.x, p.y );
-				m_origin = pickRay.origin + 10.0f * b3Normalize( pickRay.translation );
-				m_baseTranslation = m_transformB.p;
-				m_tracking = true;
-			}
-		}
-	}
-
-	void MouseUp( b3Vec2 p, int button ) override
-	{
-		m_tracking = false;
-		m_rotating = false;
-	}
-
-	void MouseMove( b3Vec2 p ) override
-	{
-		if ( m_tracking )
-		{
-			PickRay pickRay = m_camera->BuildPickRay( p.x, p.y );
-			b3Pos origin = pickRay.origin + 10.0f * b3Normalize( pickRay.translation );
-			m_transformB.p = m_baseTranslation + b3SubPos( origin, m_origin );
-		}
-
-		if ( m_rotating )
-		{
-			m_transformB.q = DragRotation( m_camera, m_transformB.q, p.x - m_lastX, p.y - m_lastY );
-			m_lastX = p.x;
-			m_lastY = p.y;
-		}
 	}
 
 	static constexpr int m_pointCapacity = 8;
@@ -348,16 +336,12 @@ public:
 	b3WorldTransform m_transformB;
 
 	b3Vec3 m_triangle[3] = {};
-	b3Pos m_baseTranslation;
-	b3Pos m_origin;
 	b3SimplexCache m_simplexCache;
 	b3SATCache m_satCache;
 	int m_manualFeature;
-	float m_lastX;
-	float m_lastY;
 	bool m_useCache;
-	bool m_tracking;
-	bool m_rotating;
+	bool m_showGizmo;
+	bool m_gizmoLocal;
 };
 
 class SphereAndSphere : public Manifold
@@ -811,10 +795,13 @@ public:
 
 static int sampleCollideHulls = RegisterSample( "Manifold", "Hull vs Hull", HullAndHull::Create );
 
-// Shows the candidate axes culled by the inscribed sphere bound in the separating axis test. No axis n
-// can separate the hulls by more than dot(n, centerB - centerA) - innerRadiusA - innerRadiusB, so any
-// face or edge whose bound is below the best separation found so far is skipped. This recomputes the
-// culling decisions of b3ComputeSeparatingAxis from public hull data and must be kept in sync with it.
+// Shows the candidate axes culled in the separating axis test. No axis n can separate the hulls by more
+// than dot(n, centerB - centerA) - innerRadiusA - innerRadiusB, so any face whose bound is below the best
+// separation found so far is skipped. An edge survives only if the plane separation of the other hull's
+// inscribed sphere can beat the best face separation somewhere over the Gauss map arc of the edge. The
+// support points of the best faces lie on the other hull, so they give a second, tighter arc test.
+// This recomputes the culling decisions of b3ComputeSeparatingAxis from public hull data and must be
+// kept in sync with it.
 class HullCulling : public Manifold
 {
 public:
@@ -824,6 +811,17 @@ public:
 		e_culled,
 		e_tested,
 	};
+
+	enum EdgeBound
+	{
+		e_noBound = 0,
+		e_sphereBound,
+		e_supportBound,
+		e_bothBounds,
+	};
+
+	// Mirrors B3_EDGE_PROBE_MIN_TESTS
+	static constexpr int probeMinTests = 10;
 
 	explicit HullCulling( SampleContext* context )
 		: Manifold( context )
@@ -847,6 +845,7 @@ public:
 		m_showSpheres = true;
 		m_showCulled = true;
 		m_showNormals = true;
+		m_edgeBound = e_bothBounds;
 		ResetCounts();
 	}
 
@@ -884,6 +883,10 @@ public:
 		ImGui::Checkbox( "Inscribed spheres", &m_showSpheres );
 		ImGui::Checkbox( "Culled features", &m_showCulled );
 		ImGui::Checkbox( "Face normals", &m_showNormals );
+		const char* edgeBounds[] = { "None", "Sphere", "Support", "Sphere + Support" };
+		ImGuiStyle& style = ImGui::GetStyle();
+		ImGui::SetNextItemWidth( ImGui::CalcTextSize( edgeBounds[3] ).x + ImGui::GetFrameHeight() + 2.0f * style.FramePadding.x );
+		ImGui::Combo( "Edge bound", &m_edgeBound, edgeBounds, IM_ARRAYSIZE( edgeBounds ) );
 
 		bool rebuild = ImGui::Checkbox( "Cylinders", &m_useCylinders );
 		if ( m_useCylinders )
@@ -912,52 +915,110 @@ public:
 		memset( m_edgeStateB, 0, sizeof( m_edgeStateB ) );
 		m_seedA = 0;
 		m_seedB = 0;
+		m_probeVertexA = 0;
+		m_probeVertexB = 0;
 		m_keptEdgeCountA = 0;
 		m_keptEdgeCountB = 0;
+		m_sphereKeptEdgeCountA = 0;
+		m_sphereKeptEdgeCountB = 0;
 		m_separationA = -FLT_MAX;
 		m_separationB = -FLT_MAX;
 		m_gap = 0.0f;
+		m_probeApplied = false;
 		m_separatedFeature = b3_invalidAxis;
 	}
 
-	// Face of A against the vertices of B, in frame A
-	static float FaceSeparationA( const b3HullData* hullA, const b3HullData* hullB, b3Transform transformBtoA, int faceIndex )
+	// Face of A against the vertices of B, in frame A. The deepest vertex of B is the support point.
+	static float FaceSeparationA( const b3HullData* hullA, const b3HullData* hullB, b3Transform transformBtoA, int faceIndex,
+								  int* vertexIndex = nullptr )
 	{
 		b3Plane plane = b3GetHullPlanes( hullA )[faceIndex];
 		const b3Vec3* points = b3GetHullPoints( hullB );
 		float separation = FLT_MAX;
+		int bestIndex = 0;
 		for ( int i = 0; i < hullB->vertexCount; ++i )
 		{
 			b3Vec3 point = b3TransformPoint( transformBtoA, points[i] );
-			separation = b3MinFloat( separation, b3Dot( plane.normal, point ) - plane.offset );
+			float s = b3Dot( plane.normal, point ) - plane.offset;
+			if ( s < separation )
+			{
+				separation = s;
+				bestIndex = i;
+			}
 		}
+
+		if ( vertexIndex != nullptr )
+		{
+			*vertexIndex = bestIndex;
+		}
+
 		return separation;
 	}
 
-	// Face of B against the vertices of A, in frame B
-	static float FaceSeparationB( const b3HullData* hullA, const b3HullData* hullB, b3Transform transformBtoA, int faceIndex )
+	// Face of B against the vertices of A, in frame B. The deepest vertex of A is the support point.
+	static float FaceSeparationB( const b3HullData* hullA, const b3HullData* hullB, b3Transform transformBtoA, int faceIndex,
+								  int* vertexIndex = nullptr )
 	{
 		b3Plane plane = b3GetHullPlanes( hullB )[faceIndex];
 		const b3Vec3* points = b3GetHullPoints( hullA );
 		float separation = FLT_MAX;
+		int bestIndex = 0;
 		for ( int i = 0; i < hullA->vertexCount; ++i )
 		{
 			b3Vec3 point = b3InvTransformPoint( transformBtoA, points[i] );
-			separation = b3MinFloat( separation, b3Dot( plane.normal, point ) - plane.offset );
+			float s = b3Dot( plane.normal, point ) - plane.offset;
+			if ( s < separation )
+			{
+				separation = s;
+				bestIndex = i;
+			}
 		}
+
+		if ( vertexIndex != nullptr )
+		{
+			*vertexIndex = bestIndex;
+		}
+
 		return separation;
 	}
 
-	// Mirrors b3ArcCanReach
-	static bool ArcCanReach( float a, float b, float c, float length, float bound )
+	// Mirrors b3TestEdgeCandidateSorted
+	static bool ArcCanReachSorted( float a, float b, float c, float bound )
 	{
 		const float parallelTolerance = 1.0e-4f;
+		float hi = b3MaxFloat( a, b );
+		float lo = b3MinFloat( a, b );
+		float u = lo - c * hi;
 		float s = 1.0f - c * c;
-		float t = a * a + b * b - 2.0f * a * b * c;
-		bool endpoint = b3MaxFloat( a, b ) >= bound;
-		bool interior =
-			a >= c * b && b >= c * a && length >= bound && ( bound <= 0.0f || s < parallelTolerance || t >= bound * bound * s );
-		return endpoint || interior;
+		bool exterior = hi >= bound;
+		bool interior = u >= 0.0f && ( u * u >= ( bound - hi ) * ( bound + hi ) * s || s < parallelTolerance );
+		return exterior || interior;
+	}
+
+	// Arc test of every surviving edge against the plane separations of a point on the other hull.
+	// Mirrors the gather loops and b3FilterEdgeCandidates, edges that fail are culled.
+	static int CullEdges( const b3HullData* hull, b3Vec3 point, float bound, uint8_t* states )
+	{
+		const b3HullHalfEdge* edges = b3GetHullEdges( hull );
+		const b3Plane* planes = b3GetHullPlanes( hull );
+		const float* cosines = b3GetHullEdgeCosines( hull );
+		int keptCount = 0;
+		for ( int i = 0; i < hull->edgeCount; i += 2 )
+		{
+			if ( states[i / 2] == e_culled )
+			{
+				continue;
+			}
+
+			b3Plane plane1 = planes[edges[i].face];
+			b3Plane plane2 = planes[edges[i + 1].face];
+			float d1 = b3Dot( plane1.normal, point ) - plane1.offset;
+			float d2 = b3Dot( plane2.normal, point ) - plane2.offset;
+			bool kept = ArcCanReachSorted( d1, d2, cosines[i >> 1], bound );
+			states[i / 2] = kept ? e_tested : e_culled;
+			keptCount += kept ? 1 : 0;
+		}
+		return keptCount;
 	}
 
 	// Mirrors the culling in b3ComputeSeparatingAxis with early return enabled
@@ -984,7 +1045,9 @@ public:
 			m_seedA = dotA[i] > dotA[m_seedA] ? i : m_seedA;
 		}
 
-		float floorA = b3MinFloat( FaceSeparationA( hullA, hullB, transformBtoA, m_seedA ), speculativeDistance );
+		// The seed support vertex stands in for the probe if no face improves on it
+		float seedSeparationA = FaceSeparationA( hullA, hullB, transformBtoA, m_seedA, &m_probeVertexB );
+		float floorA = b3MinFloat( seedSeparationA, speculativeDistance );
 		for ( int i = 0; i < hullA->faceCount; ++i )
 		{
 			if ( dotA[i] - radiusBound < b3MaxFloat( floorA, m_separationA ) )
@@ -994,10 +1057,12 @@ public:
 			}
 
 			m_faceStateA[i] = e_tested;
-			float separation = FaceSeparationA( hullA, hullB, transformBtoA, i );
+			int vertexIndex;
+			float separation = FaceSeparationA( hullA, hullB, transformBtoA, i, &vertexIndex );
 			if ( separation > m_separationA )
 			{
 				m_separationA = separation;
+				m_probeVertexB = vertexIndex;
 				if ( separation > speculativeDistance )
 				{
 					m_separatedFeature = b3_faceAxisA;
@@ -1014,7 +1079,8 @@ public:
 			m_seedB = dotB[i] > dotB[m_seedB] ? i : m_seedB;
 		}
 
-		float floorB = b3MaxFloat( FaceSeparationB( hullA, hullB, transformBtoA, m_seedB ), m_separationA );
+		float seedSeparationB = FaceSeparationB( hullA, hullB, transformBtoA, m_seedB, &m_probeVertexA );
+		float floorB = b3MaxFloat( seedSeparationB, m_separationA );
 		floorB = b3MinFloat( floorB, speculativeDistance );
 		for ( int i = 0; i < hullB->faceCount; ++i )
 		{
@@ -1025,10 +1091,12 @@ public:
 			}
 
 			m_faceStateB[i] = e_tested;
-			float separation = FaceSeparationB( hullA, hullB, transformBtoA, i );
+			int vertexIndex;
+			float separation = FaceSeparationB( hullA, hullB, transformBtoA, i, &vertexIndex );
 			if ( separation > m_separationB )
 			{
 				m_separationB = separation;
+				m_probeVertexA = vertexIndex;
 				if ( separation > speculativeDistance )
 				{
 					m_separatedFeature = b3_faceAxisB;
@@ -1037,28 +1105,42 @@ public:
 			}
 		}
 
-		float edgeBound = b3MaxFloat( m_separationA, m_separationB ) + radiusBound;
+		bool useSphere = m_edgeBound == e_sphereBound || m_edgeBound == e_bothBounds;
+		bool useSupport = m_edgeBound == e_supportBound || m_edgeBound == e_bothBounds;
+		float maxFaceSeparation = b3MaxFloat( m_separationA, m_separationB );
 
-		const b3HullHalfEdge* edgesA = b3GetHullEdges( hullA );
-		for ( int i = 0; i < hullA->edgeCount; i += 2 )
+		if ( useSphere )
 		{
-			int face1 = edgesA[i].face;
-			int face2 = edgesA[i + 1].face;
-			float c = b3Dot( planesA[face1].normal, planesA[face2].normal );
-			bool kept = ArcCanReach( dotA[face1], dotA[face2], c, centerDistance, edgeBound );
-			m_edgeStateA[i / 2] = kept ? e_tested : e_culled;
-			m_keptEdgeCountA += kept ? 1 : 0;
+			// Inscribed sphere bound, the arc inputs are plane separations of the other hull's center
+			float boundSlack = radius - radiusBound;
+			float thresholdA = maxFaceSeparation + hullB->innerRadius - boundSlack;
+			float thresholdB = maxFaceSeparation + hullA->innerRadius - boundSlack;
+			b3Vec3 centerBinA = b3TransformPoint( transformBtoA, hullB->center );
+			b3Vec3 centerAinB = b3InvTransformPoint( transformBtoA, hullA->center );
+			m_keptEdgeCountA = CullEdges( hullA, centerBinA, thresholdA, m_edgeStateA );
+			m_keptEdgeCountB = CullEdges( hullB, centerAinB, thresholdB, m_edgeStateB );
+		}
+		else
+		{
+			m_keptEdgeCountA = hullA->edgeCount / 2;
+			m_keptEdgeCountB = hullB->edgeCount / 2;
+			memset( m_edgeStateA, e_tested, m_keptEdgeCountA );
+			memset( m_edgeStateB, e_tested, m_keptEdgeCountB );
 		}
 
-		const b3HullHalfEdge* edgesB = b3GetHullEdges( hullB );
-		for ( int i = 0; i < hullB->edgeCount; i += 2 )
+		m_sphereKeptEdgeCountA = m_keptEdgeCountA;
+		m_sphereKeptEdgeCountB = m_keptEdgeCountB;
+
+		// The probe is gated on the edge pair work in SIMD groups of A edges
+		int testCount = m_keptEdgeCountB * ( ( m_keptEdgeCountA + 3 ) >> 2 );
+		m_probeApplied = useSupport && testCount >= probeMinTests;
+		if ( m_probeApplied )
 		{
-			int face1 = edgesB[i].face;
-			int face2 = edgesB[i + 1].face;
-			float c = b3Dot( planesB[face1].normal, planesB[face2].normal );
-			bool kept = ArcCanReach( dotB[face1], dotB[face2], c, centerDistance, edgeBound );
-			m_edgeStateB[i / 2] = kept ? e_tested : e_culled;
-			m_keptEdgeCountB += kept ? 1 : 0;
+			float probeBound = maxFaceSeparation - ( 0.1f * B3_LINEAR_SLOP + 0.001f * b3AbsFloat( centerDistance + radius ) );
+			b3Vec3 probeB = b3TransformPoint( transformBtoA, b3GetHullPoints( hullB )[m_probeVertexB] );
+			b3Vec3 probeA = b3InvTransformPoint( transformBtoA, b3GetHullPoints( hullA )[m_probeVertexA] );
+			m_keptEdgeCountA = CullEdges( hullA, probeB, probeBound, m_edgeStateA );
+			m_keptEdgeCountB = CullEdges( hullB, probeA, probeBound, m_edgeStateB );
 		}
 	}
 
@@ -1177,6 +1259,14 @@ public:
 			DrawWireSphere( m_transformB, &sphereB, 32, MakeColor( b3_colorDeepSkyBlue ) );
 		}
 
+		if ( m_probeApplied )
+		{
+			b3Pos probeA = b3TransformWorldPoint( m_transformA, b3GetHullPoints( hullA )[m_probeVertexA] );
+			b3Pos probeB = b3TransformWorldPoint( m_transformB, b3GetHullPoints( hullB )[m_probeVertexB] );
+			DrawPoint( probeA, 12.0f, MakeColor( b3_colorMagenta ) );
+			DrawPoint( probeB, 12.0f, MakeColor( b3_colorMagenta ) );
+		}
+
 		int faceCountA = hullA->faceCount;
 		int faceCountB = hullB->faceCount;
 		int edgeCountA = hullA->edgeCount / 2;
@@ -1188,7 +1278,6 @@ public:
 		bool edgesReached = m_separatedFeature == b3_invalidAxis;
 		int seedCount = m_separatedFeature == b3_faceAxisA ? 1 : 2;
 
-		DrawTextLine( "drag to move B, shift + drag to rotate B" );
 		DrawTextLine( "vertices %d, faces %d, edges %d", hullA->vertexCount, faceCountA, edgeCountA );
 		DrawTextLine( "|d| - rA - rB = %.3f", m_gap );
 		DrawTextLine( "faces A: tested %d, culled %d of %d, best separation %.4f", testedA, culledA, faceCountA, m_separationA );
@@ -1217,6 +1306,22 @@ public:
 			int totalPairCount = edgeCountA * edgeCountB;
 			DrawTextLine( "edges kept: A %d of %d, B %d of %d", m_keptEdgeCountA, edgeCountA, m_keptEdgeCountB, edgeCountB );
 			DrawTextLine( "edge pairs: %d of %d (%.1f%%)", pairCount, totalPairCount, 100.0f * pairCount / totalPairCount );
+
+			if ( m_probeApplied && m_edgeBound == e_bothBounds )
+			{
+				int spherePairCount = m_sphereKeptEdgeCountA * m_sphereKeptEdgeCountB;
+				DrawTextLine( "sphere bound: A %d, B %d, edge pairs %d (%.1f%%)", m_sphereKeptEdgeCountA, m_sphereKeptEdgeCountB,
+							  spherePairCount, 100.0f * spherePairCount / totalPairCount );
+			}
+
+			if ( m_probeApplied )
+			{
+				DrawTextLine( "magenta points are the support probes" );
+			}
+			else if ( m_edgeBound == e_supportBound || m_edgeBound == e_bothBounds )
+			{
+				DrawTextLine( "probe skipped, fewer than %d edge tests", probeMinTests );
+			}
 		}
 
 		DrawTextLine( "SAT type: %d", m_satCache.type );
@@ -1237,8 +1342,15 @@ public:
 	uint8_t m_edgeStateB[B3_MAX_HULL_EDGES];
 	int m_seedA;
 	int m_seedB;
+
+	// Support vertex on each hull for the best face of the other, it probes the edges of the other hull
+	int m_probeVertexA;
+	int m_probeVertexB;
+
 	int m_keptEdgeCountA;
 	int m_keptEdgeCountB;
+	int m_sphereKeptEdgeCountA;
+	int m_sphereKeptEdgeCountB;
 	float m_separationA;
 	float m_separationB;
 	float m_gap;
@@ -1250,6 +1362,8 @@ public:
 	bool m_showSpheres;
 	bool m_showCulled;
 	bool m_showNormals;
+	int m_edgeBound;
+	bool m_probeApplied;
 };
 
 static int sampleHullCulling = RegisterSample( "Manifold", "Hull Culling", HullCulling::Create );
@@ -1574,6 +1688,8 @@ public:
 			Search();
 		}
 
+		DrawGizmoControls( &m_showGizmo, &m_gizmoLocal );
+
 		return true;
 	}
 
@@ -1649,7 +1765,6 @@ public:
 		b3Pos centerB = b3TransformWorldPoint( m_transformB, m_hullB->center );
 		DrawLine( centerA, centerB, MakeColor( b3_colorWhite ) );
 
-		DrawTextLine( "drag to move B, shift + drag to rotate B" );
 		DrawTextLine( "search: %s after %d poses", m_searchFound ? "found" : "not found", m_searchCount );
 		DrawTextLine( "best separation: face A %.4f, face B %.4f, edge %.4f -> %s", m_faceSeparationA, m_faceSeparationB,
 					  m_edge.separation, m_edgeWins ? "EDGE WINS" : "face wins" );

@@ -11,6 +11,7 @@
 #include "box3d/collision.h"
 #include "box3d/constants.h"
 
+#include <float.h>
 #include <stdbool.h>
 #include <stddef.h>
 

@@ -114,83 +114,122 @@ static inline void b3GetFaceDotsW4( const b3HullData* hull, b3Vec3 d, float* dot
 
 #define B3_PARALLEL_TOL 1e-4f
 
-// A hull edge is bounded by two face normals. On the Gauss map the edge becomes an arc between
-// those two face normals. An edge can only build the best separating axis if a normal on that arc
-// can beat the best separation value seen so far. This function determines if the upper bound
-// separation on that arc can possibly beat the current maximum face separation.
-//
-// This follows the upper bound used for hull faces:
-// separation_upper_bound = dot(axis, centerB - centerA) - innerRadiusA - innerRadiusB
-//
-// Inputs:
-// d the vector connecting the hull centers
-// a1 = dot(n1, d)
-// a2 = dot(n2, d)
-// c = dot(n1, n2)
-// bound = maxFaceSeparation + radiusBound
-//
-// This returns 1 if the edges is a candidate and 0 otherwise.
-static inline int b3TestEdgeCandidateW4( float a1, float a2, float c, float bound )
+// Inscribed sphere edge test. https://box2d.org/posts/2026/09/inscribed-spheres/
+// The implementation here is a mix of the versions from Cairn Overturf and Dirk Gregorius:
+// https://gist.github.com/cairnc/dee7a2866da0709f2d9a77b6493b57b5
+// https://gist.github.com/dgregorius/e6751b5c00937cd21af63cba3c53c861
+// This benchmarks faster than the version from the blog post.
+static inline int b3TestEdgeCandidateSortedW4( float a1, float a2, float c, float bound )
 {
-	// c = cos(theta), the angle between the normals.
-	// s = sin(theta)^2 >= 0
+	// We want to maximize
+	//
+	//   f(t) = dot(d, nlerp(n1, n2, t))
+	//
+	// over t in [0, 1], where
+	//
+	//   a1 = dot(n1, d)
+	//   a2 = dot(n2, d)
+	//   c  = dot(n1, n2).
+	//
+	// The maximum can occur either at an endpoint or at an interior
+	// critical point where f'(t) = 0.
+
+	// Since the endpoint values are a1 and a2, only the larger endpoint
+	// needs to be tested against the bound.
+	float hi = b3MaxFloat( a1, a2 );
+	float lo = b3MinFloat( a1, a2 );
+	int exterior = hi >= bound;
+
+	// Differentiating f(t) gives
+	//
+	//           a2 - c*a1 - (1 - c)*(a1 + a2)*t
+	//   f'(t) = --------------------------------------
+	//           ((1 - t)^2 + t^2 + 2*c*t*(1 - t))^(3/2)
+	//
+	// The denominator is positive and the numerator is linear in t.
+	// An interior maximum therefore requires
+	//
+	//   f'(0) >= 0  ->  a2 >= c*a1
+	//   f'(1) <= 0  ->  a1 >= c*a2.
+	//
+	// After sorting these become
+	//
+	//   hi >= c*lo
+	//   lo >= c*hi.
+	//
+	// The second is always the stricter condition since
+	//
+	//   (hi - c*lo) - (lo - c*hi)
+	//       = (1 + c)*(hi - lo) >= 0.
+	//
+	// Thus both conditions reduce to u >= 0.
+	float u = lo - c * hi;
+	int maxIsInterior = u >= 0.0f;
+
+	// Solving f'(t) = 0 and evaluating f(t) at tmax gives
+	//
+	//   f(tmax)^2 =
+	//       (a1^2 + a2^2 - 2*c*a1*a2) / (1 - c^2).
+	//
+	// After sorting,
+	//
+	//   hi^2 + lo^2 - 2*c*hi*lo
+	//       = hi^2*(1 - c^2) + u^2.
+	//
+	// Let s = 1 - c^2 and rearrange f(tmax) >= bound:
+	//
+	//   u^2 >= (bound^2 - hi^2)*s.
 	float s = 1.0f - c * c;
+	float boundTerm = ( bound - hi ) * ( bound + hi );
+	float lhs = u * u;
+	float rhs = boundTerm * s;
+	int maxBeatsBound = lhs >= rhs;
 
-	// This is coincidentally the law of cosines. Break out your protractor.
-	float t = a1 * a1 + a2 * a2 - 2.0f * a1 * a2 * c;
+	// The interior expression contains 1 - c^2 in its denominator.
+	// When this approaches zero the arc is degenerate or ill-conditioned,
+	// so conservatively keep the edge as a candidate.
+	int nearlyParallel = s < B3_PARALLEL_TOL;
 
-	// Exterior conditions:
-	// Can either face normal beat the best separation? These cover the case where
-	// d is outside the arc. Note that d pointing outside the arc does not cull this
-	// edge. It can still generate the maximum separation (happens commonly).
-	// Note: when earlyReturn == false, bound == -INFINITY and this is always true.
-	int exterior = b3MaxFloat( a1, a2 ) >= bound;
-
-	// Project d into the plane that holds both n1 and n2, call that vector dp.
-	// Introduce the coordinates b1 and b2 (these have units of length).
-	//
-	// dp = b1*n1 + b2*n2
-	//
-	// Since dp is the projection of d into the plane formed by the cross(n1, n2):
-	// dot(n1, dp) == dot(n1, d) == a1
-	// dot(n2, dp) == dot(n2, d) == a2
-	//
-	// Dot the equation with n1 and n2:
-	// a1 = b1 + b2*c
-	// a2 = b1*c + b2
-	//
-	// Solve for b1 and b2 using Cramer's Rule
-	// b1 = (a1 - a2 * c) / s
-	// b2 = (a2 - a1 * c) / s
-	//
-	// s = 1 - c * c is positive, so b1 and b2 must be positive for d to live in
-	// the arc between n1 and n2.
-	//
-	// The peak value along d is then norm(dp):
-	// dot(dp, dp) = dot(b1*n1 + b2*n2, d)
-	//             = b1*a1 + b2*a2
-	//             = (a1*a1 - a1*a2*c + a2*a2 - a1*a2*c) / s
-	//             = (a1*a1 + a2*a2 - 2*a1*a2*c) / s
-	//             = t / s
-	//
-	// The interior is a candidate if:
-	// norm(dp) > bound
-	// sqrt(t / s) > bound
-	// If bound < 0 this is always true. Otherwise
-	// t > bound^2 * s
-	//
-	// Interior conditions:
-	// b1 and b2 positive (interior arc): a1 >= c * a2 & a2 >= c * a1
-	// bound <= 0.0: the interior arc is automatically a candidate because it is positive
-	// s < B3_PARALLEL_TOL : n1 and n2 are nearly parallel so give up and pass the edge to the next stage
-	// t >= bound * bound * s : bound is positive and the interior normal direction is a candidate
-	//
-	// Using bit ops here to avoid branches.
-
-	int interior =
-		( a1 >= c * a2 ) & ( a2 >= c * a1 ) & ( ( bound <= 0.0f ) | ( s < B3_PARALLEL_TOL ) | ( t >= bound * bound * s ) );
+	int interior = maxIsInterior & ( maxBeatsBound | nearlyParallel );
 
 	return exterior | interior;
+}
+
+// dot(n, otherCenter) - offset for all faces of the hull, padded to the SIMD width.
+static inline void b3GetFacePlaneSeparationsW4( const b3HullData* hull, b3Vec3 otherCenter, float* separations )
+{
+	b3GetFaceDotsW4( hull, otherCenter, separations );
+
+	const b3Plane* planes = b3GetHullPlanes( hull );
+	int faceCount = hull->faceCount;
+	for ( int i = 0; i < faceCount; ++i )
+	{
+		separations[i] -= planes[i].offset;
+	}
+}
+
+// The number of edge pair tests needed to make the extra culling pass worthwhile.
+#define B3_EDGE_PROBE_MIN_TESTS 10
+
+// Re-test edge candidates against the plane separations of a probe point on the other hull
+static inline int b3FilterEdgeCandidatesW4( const b3HullData* hull, const float* planeSeparations, float bound, int* edgeIndices,
+										  int count )
+{
+	const b3HullHalfEdge* halfEdges = b3GetHullEdges( hull );
+	const float* cosines = b3GetHullEdgeCosines( hull );
+	int keptCount = 0;
+
+	for ( int k = 0; k < count; ++k )
+	{
+		int i = edgeIndices[k];
+		int i1 = halfEdges[i].face;
+		int i2 = halfEdges[i + 1].face;
+		float c = cosines[i >> 1];
+		edgeIndices[keptCount] = i;
+		keptCount += b3TestEdgeCandidateSortedW4( planeSeparations[i1], planeSeparations[i2], c, bound );
+	}
+
+	return keptCount;
 }
 
 // Temporary abbreviations for convenience.
@@ -279,15 +318,16 @@ b3AxisQuery b3ComputeSeparatingAxisW4( const b3HullData* hullA, const b3HullData
 
 	// Use the seed to get a lower bound on the separation for the faces of hullA.
 	float floorA = -INFINITY;
+	float seedSeparationA = -INFINITY;
+	int seedVertexB = 0;
 	if ( earlyReturn )
 	{
 		b3Plane plane = planesA[seedIndexA];
 		b3Vec3 direction = b3Neg( b3MulMV( invR, plane.normal ) );
 		float planeSeparation = b3Dot( plane.normal, xfB.p ) - plane.offset;
-		int vertexIndex;
-		float separation =
-			b3GetFaceSeparationW4( direction, planeSeparation, vxB, vyB, vzB, soaVertexCountB, cB, hB, &vertexIndex );
-		floorA = b3MinFloat( separation, speculativeDistance );
+		seedSeparationA =
+			b3GetFaceSeparationW4( direction, planeSeparation, vxB, vyB, vzB, soaVertexCountB, cB, hB, &seedVertexB );
+		floorA = b3MinFloat( seedSeparationA, speculativeDistance );
 	}
 
 	// Test A's face planes against B's vertices.
@@ -300,11 +340,18 @@ b3AxisQuery b3ComputeSeparatingAxisW4( const b3HullData* hullA, const b3HullData
 		}
 
 		b3Plane plane = planesA[i];
-		b3Vec3 direction = b3Neg( b3MulMV( invR, plane.normal ) );
-		float planeSeparation = b3Dot( plane.normal, xfB.p ) - plane.offset;
-		int vertexIndex;
-		float separation =
-			b3GetFaceSeparationW4( direction, planeSeparation, vxB, vyB, vzB, soaVertexCountB, cB, hB, &vertexIndex );
+		int vertexIndex = seedVertexB;
+		float separation = seedSeparationA;
+
+		// Avoid recomputing the seed face separation.
+		if ( earlyReturn == false || i != seedIndexA )
+		{
+			b3Vec3 direction = b3Neg( b3MulMV( invR, plane.normal ) );
+			float planeSeparation = b3Dot( plane.normal, xfB.p ) - plane.offset;
+			separation =
+				b3GetFaceSeparationW4( direction, planeSeparation, vxB, vyB, vzB, soaVertexCountB, cB, hB, &vertexIndex );
+		}
+
 		if ( separation > res.faceA.separation )
 		{
 			res.faceA.normal = plane.normal;
@@ -349,17 +396,18 @@ b3AxisQuery b3ComputeSeparatingAxisW4( const b3HullData* hullA, const b3HullData
 
 	// Get a lower bound on the separation for the faces of hullB.
 	float floorB = -INFINITY;
+	float seedSeparationB = -INFINITY;
+	int seedVertexA = 0;
 	if ( earlyReturn )
 	{
 		b3Plane plane = planesB[seedIndexB];
 		b3Vec3 direction = b3Neg( b3MulMV( R, plane.normal ) );
 		float planeSeparation = b3Dot( direction, xfB.p ) - plane.offset;
-		int vertexIndex;
-		float separation =
-			b3GetFaceSeparationW4( direction, planeSeparation, vxA, vyA, vzA, soaVertexCountA, cA, hA, &vertexIndex );
+		seedSeparationB =
+			b3GetFaceSeparationW4( direction, planeSeparation, vxA, vyA, vzA, soaVertexCountA, cA, hA, &seedVertexA );
 
 		// Include the floor set by hull A faces.
-		floorB = b3MaxFloat( separation, res.faceA.separation );
+		floorB = b3MaxFloat( seedSeparationB, res.faceA.separation );
 		floorB = b3MinFloat( floorB, speculativeDistance );
 	}
 
@@ -373,10 +421,17 @@ b3AxisQuery b3ComputeSeparatingAxisW4( const b3HullData* hullA, const b3HullData
 
 		b3Plane plane = planesB[i];
 		b3Vec3 direction = b3Neg( b3MulMV( R, plane.normal ) );
-		float planeSeparation = b3Dot( direction, xfB.p ) - plane.offset;
-		int vertexIndex;
-		float separation =
-			b3GetFaceSeparationW4( direction, planeSeparation, vxA, vyA, vzA, soaVertexCountA, cA, hA, &vertexIndex );
+		int vertexIndex = seedVertexA;
+		float separation = seedSeparationB;
+
+		// Avoid recomputing the seed face separation.
+		if ( earlyReturn == false || i != seedIndexB )
+		{
+			float planeSeparation = b3Dot( direction, xfB.p ) - plane.offset;
+			separation =
+				b3GetFaceSeparationW4( direction, planeSeparation, vxA, vyA, vzA, soaVertexCountA, cA, hA, &vertexIndex );
+		}
+
 		if ( separation > res.faceB.separation )
 		{
 			res.faceB.normal = direction;
@@ -396,38 +451,71 @@ b3AxisQuery b3ComputeSeparatingAxisW4( const b3HullData* hullA, const b3HullData
 	_Static_assert( ( B3_MAX_HULL_FACES & ( B3_SIMD_WIDTH - 1 ) ) == 0, "must be multiple of SIMD width" );
 	_Static_assert( ( B3_MAX_HULL_VERTICES & ( B3_SIMD_WIDTH - 1 ) ) == 0, "must be multiple of SIMD width" );
 
-	// Bound to skip edge tests. Derived from:
-	// dot(edgeNormal, deltaCenter) - radiusBound > maxSep
-	float edgeBound = earlyReturn ? b3MaxFloat( res.faceA.separation, res.faceB.separation ) + radiusBound : -INFINITY;
-
-	B3_VALIDATE( earlyReturn == false || centerDistance >= edgeBound );
+	B3_VALIDATE( earlyReturn == false ||
+				 centerDistance >= b3MaxFloat( res.faceA.separation, res.faceB.separation ) + radiusBound );
 
 	// Gather edges of A that can feasibly create a separating axis that beats the maximum face separation.
 	int halfEdgeCountA = hullA->edgeCount;
 	const b3HullHalfEdge* halfEdgesA = b3GetHullEdges( hullA );
 	int edgeIndicesA[NE];
 	int na = 0;
-	for ( int i = 0; i < halfEdgeCountA; i += 2 )
-	{
-		int i1 = halfEdgesA[i].face;
-		int i2 = halfEdgesA[i + 1].face;
-		float c = b3Dot( planesA[i1].normal, planesA[i2].normal );
-		edgeIndicesA[na] = i;
-		na += b3TestEdgeCandidateW4( dotA[i1], dotA[i2], c, edgeBound );
-	}
 
-	// Similar for edges of B.
 	int halfEdgeCountB = hullB->edgeCount;
 	const b3HullHalfEdge* halfEdgesB = b3GetHullEdges( hullB );
 	int edgeIndicesB[B3_MAX_HULL_EDGES];
 	int nb = 0;
+
+	float maxFaceSeparation = b3MaxFloat( res.faceA.separation, res.faceB.separation );
+	float boundSlack = radius - radiusBound;
+	float thresholdA = earlyReturn ? maxFaceSeparation + hullB->innerRadius - boundSlack : -INFINITY;
+	float thresholdB = earlyReturn ? maxFaceSeparation + hullA->innerRadius - boundSlack : -INFINITY;
+
+	b3Vec3 centerBinA = b3Add( b3MulMV( R, hullB->center ), xfB.p );
+	b3Vec3 centerAinB = b3MulMV( invR, b3Sub( hullA->center, xfB.p ) );
+
+	_Alignas( 16 ) float planeDotA[NF];
+	_Alignas( 16 ) float planeDotB[NF];
+	b3GetFacePlaneSeparationsW4( hullA, centerBinA, planeDotA );
+	b3GetFacePlaneSeparationsW4( hullB, centerAinB, planeDotB );
+
+	const float* cosinesA = b3GetHullEdgeCosines( hullA );
+	const float* cosinesB = b3GetHullEdgeCosines( hullB );
+
+	for ( int i = 0; i < halfEdgeCountA; i += 2 )
+	{
+		int i1 = halfEdgesA[i].face;
+		int i2 = halfEdgesA[i + 1].face;
+		float c = cosinesA[i >> 1];
+		edgeIndicesA[na] = i;
+		na += b3TestEdgeCandidateSortedW4( planeDotA[i1], planeDotA[i2], c, thresholdA );
+	}
+
 	for ( int i = 0; i < halfEdgeCountB; i += 2 )
 	{
 		int i1 = halfEdgesB[i].face;
 		int i2 = halfEdgesB[i + 1].face;
-		float c = b3Dot( planesB[i1].normal, planesB[i2].normal );
+		float c = cosinesB[i >> 1];
 		edgeIndicesB[nb] = i;
-		nb += b3TestEdgeCandidateW4( dotB[i1], dotB[i2], c, edgeBound );
+		nb += b3TestEdgeCandidateSortedW4( planeDotB[i1], planeDotB[i2], c, thresholdB );
+	}
+
+	// Apply additional culling use the support points for the best face axes.
+	// The support vertices of the best faces are points on the other hull, so an edge pair axis cannot
+	// have a larger separation than the plane separation of these points over the arc of the edge.
+	// This can slow down boxes so skip this if there are not enough edge candidates.
+	if ( earlyReturn && nb * ( ( na + 3 ) >> 2 ) >= B3_EDGE_PROBE_MIN_TESTS )
+	{
+		float probeBound = maxFaceSeparation - ( 0.1f * B3_LINEAR_SLOP + 0.001f * b3AbsFloat( centerDistance + radius ) );
+
+		int vertexB = res.faceA.indexB != B3_NULL_INDEX ? res.faceA.indexB : seedVertexB;
+		b3Vec3 probeB = { vxB[vertexB], vyB[vertexB], vzB[vertexB] };
+		b3GetFacePlaneSeparationsW4( hullA, b3Add( b3MulMV( R, probeB ), xfB.p ), planeDotA );
+		na = b3FilterEdgeCandidatesW4( hullA, planeDotA, probeBound, edgeIndicesA, na );
+
+		int vertexA = res.faceB.indexA != B3_NULL_INDEX ? res.faceB.indexA : seedVertexA;
+		b3Vec3 probeA = { vxA[vertexA], vyA[vertexA], vzA[vertexA] };
+		b3GetFacePlaneSeparationsW4( hullB, b3MulMV( invR, b3Sub( probeA, xfB.p ) ), planeDotB );
+		nb = b3FilterEdgeCandidatesW4( hullB, planeDotB, probeBound, edgeIndicesB, nb );
 	}
 
 	if ( na == 0 || nb == 0 )
