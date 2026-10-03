@@ -65,6 +65,9 @@ void EnableSatInscribedSphere( SatBenchmarkData* data, bool flag );
 
 SatBenchmarkResult RunSatBenchmark( const SatBenchmarkData* data, int repeatCount, bool warmStartDistance );
 
+void SetSimdWidth( int width );
+int GetSimdWidth( void );
+
 #ifdef __cplusplus
 }
 #endif

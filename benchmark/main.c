@@ -125,7 +125,7 @@ static void RunSatBenchmarks( int runCount )
 	int repeatCount = 1;
 #endif
 
-	printf( "benchmark: sat, pairs = %d, repeats = %d\n", SAT_PAIR_COUNT, repeatCount );
+	printf( "benchmark: sat, pairs = %d, repeats = %d, simd width = %d\n", SAT_PAIR_COUNT, repeatCount, GetSimdWidth() );
 	printf( "time per query (us), sat full has the inscribed sphere bound disabled\n" );
 	printf( "%-20s %10s %10s %10s %10s\n", "pair", "gjk cold", "gjk warm", "sat", "sat full" );
 
@@ -284,6 +284,7 @@ int main( int argc, char** argv )
 	bool enableContinuous = true;
 	bool recordStepTimes = false;
 	bool runSat = false;
+	int simdWidth = 0;
 
 	assert( maxThreadCount <= B3_MAX_WORKERS );
 
@@ -340,6 +341,20 @@ int main( int argc, char** argv )
 			exit( 1 );
 #endif
 		}
+		else if ( ( value = MatchValue( arg, "-simd=", "--simd-width=" ) ) != NULL )
+		{
+			simdWidth = atoi( value );
+			if ( simdWidth != 4 && simdWidth != 8 )
+			{
+				printf( "The SIMD width must be 4 or 8\n" );
+				exit( 1 );
+			}
+
+#ifndef BOX3D_INTERNAL_BENCHMARKS
+			printf( "Forcing the SIMD width requires static linkage\n" );
+			exit( 1 );
+#endif
+		}
 		else if ( strcmp( arg, "-l" ) == 0 || strcmp( arg, "--list" ) == 0 )
 		{
 			PrintBenchmarks( benchmarks, benchmarkCount );
@@ -355,6 +370,7 @@ int main( int argc, char** argv )
 					"-nc, --no-continuous: disable continuous collision\n"
 					"-s, --record-steps: record step times\n"
 					"-sat, --sat: compare GJK and SAT on hull pairs, then exit\n"
+					"-simd, --simd-width=<4|8>: force the SIMD width (static Box3D only)\n"
 					"-l, --list: list the registered benchmarks\n"
 					"-h, --help: print this help\n" );
 			exit( 0 );
@@ -371,6 +387,11 @@ int main( int argc, char** argv )
 	}
 
 #ifdef BOX3D_INTERNAL_BENCHMARKS
+	if ( simdWidth != 0 )
+	{
+		SetSimdWidth( simdWidth );
+	}
+
 	if ( runSat )
 	{
 		RunSatBenchmarks( runCount );
@@ -381,6 +402,9 @@ int main( int argc, char** argv )
 
 	printf( "Starting benchmarks\n" );
 	printf( "======================================\n" );
+#ifdef BOX3D_INTERNAL_BENCHMARKS
+	printf( "simd width = %d\n", GetSimdWidth() );
+#endif
 
 	for ( int benchmarkIndex = 0; benchmarkIndex < benchmarkCount; ++benchmarkIndex )
 	{

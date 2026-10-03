@@ -7,6 +7,7 @@
 
 #include "physics_world.h"
 #include "recording.h"
+#include "simd.h"
 #include "test_macros.h"
 
 #include "box3d/box3d.h"
@@ -130,6 +131,106 @@ static int HullDedup( void )
 	ENSURE( entryCount == 1 );
 
 	b3DestroyRecording( rec );
+	return 0;
+}
+
+static int ValidateReplayAtWidth( const b3Recording* rec, int width )
+{
+	b3SetSIMDWidth( width );
+	bool valid = b3ValidateReplay( b3Recording_GetData( rec ), b3Recording_GetSize( rec ), 1 );
+	b3SetSIMDWidth( 0 );
+	return valid ? 0 : 1;
+}
+
+// A recording made at the native SIMD width must replay at width 4 and vice versa.
+static int CrossWidthReplay( void )
+{
+	b3SetSIMDWidth( 0 );
+	int nativeWidth = b3GetSIMDWidth();
+	if ( nativeWidth == 4 )
+	{
+		printf( "  subtest skipped: CrossWidthReplay, native SIMD width is 4\n" );
+		return 0;
+	}
+
+	enum
+	{
+		hullCount = 6
+	};
+
+	b3HullData* hulls[hullCount] = { 0 };
+	hulls[0] = b3CreateRock( 0.5f );
+	hulls[1] = b3CreateComplexHull( 0.5f );
+	hulls[2] = b3CreateCylinder( 0.8f, 0.4f, 0.0f, 8 );
+	hulls[3] = b3CreateCone( 0.8f, 0.5f, 0.2f, 7 );
+
+	uint32_t seed = 12345u;
+	for ( int hullIndex = 4; hullIndex < hullCount; ++hullIndex )
+	{
+		b3Vec3 points[20];
+		for ( int i = 0; i < 20; ++i )
+		{
+			float v[3];
+			for ( int k = 0; k < 3; ++k )
+			{
+				seed = seed * 1664525u + 1013904223u;
+				v[k] = ( (float)( seed >> 8 ) / (float)( 1 << 24 ) - 0.5f ) * ( k == 1 ? 0.6f : 1.0f );
+			}
+			points[i] = (b3Vec3){ v[0], v[1], v[2] };
+		}
+		hulls[hullIndex] = b3CreateHull( points, 20, 20 );
+	}
+
+	b3Recording* rec = b3CreateRecording( 0 );
+
+	b3SetSIMDWidth( nativeWidth );
+
+	b3WorldDef worldDef = b3DefaultWorldDef();
+	b3WorldId worldId = b3CreateWorld( &worldDef );
+
+	b3World_StartRecording( worldId, rec );
+
+	b3BodyDef groundDef = b3DefaultBodyDef();
+	groundDef.type = b3_staticBody;
+	b3BodyId groundId = b3CreateBody( worldId, &groundDef );
+	b3BoxHull groundBox = b3MakeBoxHull( 20.0f, 1.0f, 20.0f );
+	b3ShapeDef groundShape = b3DefaultShapeDef();
+	b3CreateHullShape( groundId, &groundShape, &groundBox.base );
+
+	b3ShapeDef dynamicShape = b3DefaultShapeDef();
+	dynamicShape.density = 1.0f;
+
+	for ( int i = 0; i < 18; ++i )
+	{
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		bodyDef.type = b3_dynamicBody;
+		bodyDef.position = (b3Pos){ 0.4f * (float)( i % 3 ) - 0.4f, 1.5f + 0.9f * (float)i, 0.3f * (float)( i % 2 ) };
+		bodyDef.rotation = b3MakeQuatFromAxisAngle( (b3Vec3){ 0.0f, 1.0f, 0.0f }, 0.37f * (float)i );
+		b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
+		b3CreateHullShape( bodyId, &dynamicShape, hulls[i % hullCount] );
+	}
+
+	float timeStep = 1.0f / 60.0f;
+	for ( int i = 0; i < 120; ++i )
+	{
+		b3World_Step( worldId, timeStep, 4 );
+	}
+
+	b3World_StopRecording( worldId );
+	b3DestroyWorld( worldId );
+	b3SetSIMDWidth( 0 );
+
+	int narrowStatus = ValidateReplayAtWidth( rec, 4 );
+	int nativeStatus = ValidateReplayAtWidth( rec, nativeWidth );
+
+	b3DestroyRecording( rec );
+	for ( int i = 0; i < hullCount; ++i )
+	{
+		b3DestroyHull( hulls[i] );
+	}
+
+	ENSURE( narrowStatus == 0 );
+	ENSURE( nativeStatus == 0 );
 	return 0;
 }
 
@@ -2147,6 +2248,7 @@ int RecordingTest( void )
 	RUN_SUBTEST( HullDedup );
 	RUN_SUBTEST( MidStreamNoContacts );
 	RUN_SUBTEST( MidStreamContacts );
+	RUN_SUBTEST( CrossWidthReplay );
 	RUN_SUBTEST( StagedStepCreationPose );
 	RUN_SUBTEST( ScrubBackward );
 	RUN_SUBTEST( SeekWithHull );

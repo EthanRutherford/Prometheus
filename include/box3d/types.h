@@ -2019,7 +2019,7 @@ typedef struct b3HullFace
 } b3HullFace;
 
 /// 64-bit hull version. Useful for validating serialized data.
-#define B3_HULL_VERSION 0x9D3E61B7C2A4F085ull
+#define B3_HULL_VERSION 0x6B1E39D4A87C25F3ull
 
 /// A convex hull.
 /// @note This data structure has data hanging off the end and cannot be directly copied.
@@ -2105,9 +2105,9 @@ typedef struct b3BoxHull
 	float vx[8];				 ///< vertex x
 	float vy[8];				 ///< vertex y
 	float vz[8];				 ///< vertex z
-	float nx[8];				 ///< normal x, padded to multiple of 4
-	float ny[8];				 ///< normal y, padded to multiple of 4
-	float nz[8];				 ///< normal z, padded to multiple of 4
+	float nx[8];				 ///< normal x, padded to multiple of 8
+	float ny[8];				 ///< normal y, padded to multiple of 8
+	float nz[8];				 ///< normal z, padded to multiple of 8
 	float edgeCosines[12];		 ///< dot(n1, n2) for each full edge.
 } b3BoxHull;
 

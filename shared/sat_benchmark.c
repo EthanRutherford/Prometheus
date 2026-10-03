@@ -9,6 +9,7 @@
 #include "box3d/math_functions.h"
 
 #include "manifold.h"
+#include "simd.h"
 
 #include <stdlib.h>
 
@@ -184,4 +185,14 @@ SatBenchmarkResult RunSatBenchmark( const SatBenchmarkData* data, int repeatCoun
 		.earlyReturnCount = earlyReturnCount,
 	};
 	return result;
+}
+
+void SetSimdWidth( int width )
+{
+	b3SetSIMDWidth( width );
+}
+
+int GetSimdWidth( void )
+{
+	return b3GetSIMDWidth();
 }

@@ -188,7 +188,7 @@ B3_INLINE const b3HullFace* b3GetHullFaces( const b3HullData* hull )
 
 /// Get read only SOA vertices. This is an array of vertices with all x values,
 /// y values, and z values as separate arrays. The array lengths are padded to
-/// a multiple of 4. The padded values are repeats of the first value.
+/// a multiple of 8. The padded values are repeats of the first value.
 B3_INLINE const float* b3GetHullSoaVertices( const b3HullData* hull )
 {
 	if ( hull->soaVertexOffset == 0 )
@@ -201,7 +201,7 @@ B3_INLINE const float* b3GetHullSoaVertices( const b3HullData* hull )
 
 /// Get read only SOA unit normal vectors. This is an array of normals with all x values,
 /// y values, and z values as separate arrays. The array lengths are padded to
-/// a multiple of 4. The padded values are 0.
+/// a multiple of 8. The padded values are 0.
 B3_INLINE const float* b3GetHullSoaNormals( const b3HullData* hull )
 {
 	if ( hull->soaNormalOffset == 0 )
