@@ -90,7 +90,7 @@ jobs:
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.config || env.BUILD_TYPE }} -DBOX3D_SAMPLES=OFF -DBUILD_SHARED_LIBS=OFF -DBOX3D_VALIDATE=ON -DCMAKE_COMPILE_WARNING_AS_ERROR=ON ${{ matrix.args }}
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{ matrix.config || env.BUILD_TYPE }}
+      run: cmake --build ${{github.workspace}}/build --config ${{ matrix.config || env.BUILD_TYPE }} --parallel
 
     - name: Test
       working-directory: ${{github.workspace}}/build
@@ -128,7 +128,7 @@ jobs:
       run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOX3D_SAMPLES=OFF -DBUILD_SHARED_LIBS=OFF -DBOX3D_VALIDATE=ON -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
 
     - name: Build
-      run: cmake --build build --config RelWithDebInfo
+      run: cmake --build build --config RelWithDebInfo --parallel
 
     - name: Test
       working-directory: build
@@ -150,7 +150,7 @@ jobs:
       run: emcmake cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBOX3D_SAMPLES=OFF -DBUILD_SHARED_LIBS=OFF -DBOX3D_VALIDATE=ON
 
     - name: Build
-      run: cmake --build build --config Debug
+      run: cmake --build build --config Debug --parallel
 
   samples:
     name: ${{ matrix.name }}
@@ -201,4 +201,4 @@ jobs:
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release -DBOX3D_SAMPLES=ON -DBOX3D_UNIT_TESTS=OFF ${{ matrix.args }}
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config Release
+      run: cmake --build ${{github.workspace}}/build --config Release --parallel
