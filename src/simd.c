@@ -16,8 +16,6 @@ static b3AtomicInt b3_simdWidth;
 
 #if defined( _MSC_VER )
 #include <intrin.h>
-#else
-#include <cpuid.h>
 #endif
 
 static void b3CpuId( unsigned int leaf, unsigned int subLeaf, unsigned int registers[4] )
@@ -30,7 +28,10 @@ static void b3CpuId( unsigned int leaf, unsigned int subLeaf, unsigned int regis
 	registers[2] = (unsigned int)info[2];
 	registers[3] = (unsigned int)info[3];
 #else
-	__cpuid_count( leaf, subLeaf, registers[0], registers[1], registers[2], registers[3] );
+	// clang cpuid.h can give the rbx swap register the same register as the leaf input, clobbering rbx
+	__asm__ volatile( "cpuid"
+					  : "=a"( registers[0] ), "=b"( registers[1] ), "=c"( registers[2] ), "=d"( registers[3] )
+					  : "a"( leaf ), "c"( subLeaf ) );
 #endif
 }
 
