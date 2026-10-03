@@ -87,7 +87,9 @@
 	#endif
 #endif
 
-#define B3_SIMD_ENABLED ( !defined( B3_SIMD_NONE ) )
+#if !defined( B3_SIMD_NONE )
+	#define B3_SIMD_ENABLED
+#endif
 
 // Define compiler
 #if defined( __clang__ )
