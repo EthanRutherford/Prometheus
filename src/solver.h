@@ -259,7 +259,7 @@ typedef struct b3StepContext
 	char padding3[64];
 } b3StepContext;
 
-void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift );
+void b3Solve( b3World* world, b3StepContext* stepContext );
 
 static inline b3Softness b3MakeSoft( float hertz, float zeta, float h )
 {

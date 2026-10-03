@@ -1435,8 +1435,10 @@ static void b3BulletBodyTask( int startIndex, int endIndex, int workerIndex, voi
 }
 
 // Solve with graph coloring
-void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift )
+void b3Solve( b3World* world, b3StepContext* stepContext )
 {
+	int simdShift = world->simdWidth == 8 ? 3 : 2;
+
 	// Only count steps that advance the simulation
 	world->stepIndex += 1;
 
@@ -1554,7 +1556,7 @@ void b3Solve( b3World* world, b3StepContext* stepContext, int simdShift )
 		b3BlockDim meshPrepareDim = b3ComputeBlockCount( contactCount, minContactsPerBlock, maxBlockCount );
 		b3BlockDim jointPrepareDim = b3ComputeBlockCount( jointCount, minJointsPerBlock, maxBlockCount );
 
-		int wideContactByteCount = b3GetWideContactConstraintByteCount();
+		int wideContactByteCount = b3GetWideContactConstraintByteCount( world->simdWidth );
 		void* wideConstraints = b3StackAlloc( &world->stack, wideContactCount * wideContactByteCount, "wide contacts" );
 		b3ContactConstraint* contactConstraints =
 			(b3ContactConstraint*)b3StackAlloc( &world->stack, contactCount * sizeof( b3ContactConstraint ), "contacts" );

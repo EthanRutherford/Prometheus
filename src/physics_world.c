@@ -38,8 +38,6 @@ b3World b3_worlds[B3_MAX_WORLDS];
 b3AtomicInt b3_worldCount;
 int b3_maxWorldCount;
 
-int b3_SIMDShift = -1;
-
 const b3HullData* b3AddHullToDatabase( b3World* world, const b3HullData* src )
 {
 	b3HullMap* database = world->hullDatabase;
@@ -211,12 +209,6 @@ static void b3DestroyWorkerContexts( b3World* world )
 
 b3WorldId b3CreateWorld( const b3WorldDef* def )
 {
-	// Ensure SIMD shift is initialized, based on effective SIMD width
-	if ( b3_SIMDShift == -1 )
-	{
-		b3_SIMDShift = b3GetSIMDWidth() == 4 ? 2 : 3; // Assuming SIMD width of 4 or 8, shift is log2(width)
-	}
-
 	B3_CHECK_DEF( def );
 
 	B3_ASSERT( B3_LINEAR_SLOP <= B3_MESH_REST_OFFSET );
@@ -252,6 +244,8 @@ b3WorldId b3CreateWorld( const b3WorldDef* def )
 	uint16_t revision = world->generation;
 
 	memset( world, 0, sizeof( b3World ) );
+
+	world->simdWidth = b3GetSIMDWidth();
 
 	world->worldId = (uint16_t)worldId;
 	world->generation = revision;
@@ -1147,7 +1141,7 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 	if ( timeStep > 0.0f )
 	{
 		uint64_t solveTicks = b3GetTicks();
-		b3Solve( world, &context, b3_SIMDShift );
+		b3Solve( world, &context );
 		world->profile.solve = b3GetMilliseconds( solveTicks );
 	}
 

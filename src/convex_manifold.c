@@ -1246,48 +1246,28 @@ static bool b3BuildEdgeContact( b3LocalManifold* manifold, const b3HullData* hul
 	return true;
 }
 
-#if defined( B3_SIMD_DYNAMIC_DISPATCH )
-
-/* Dispatcher declarations */
-
-b3AxisQuery dispatchSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn );
-
-/* Dynamic dispatch function pointer initialization */
-
-b3AxisQuery ( *b3ComputeSeparatingAxisW )( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB,
-										   bool earlyReturn ) = dispatchSeparatingAxis;
-
-/* Dispatcher function definition */
-
-b3AxisQuery dispatchSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn )
+b3AxisQuery b3ComputeSeparatingAxisAtWidth( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn,
+											int simdWidth )
 {
-	b3ComputeSeparatingAxisW = b3SupportsW8() ? b3ComputeSeparatingAxisW8 : b3ComputeSeparatingAxisW4;
-	return b3ComputeSeparatingAxisW( hullA, hullB, xfB, earlyReturn );
-}
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( simdWidth == 8 )
+	{
+		return b3ComputeSeparatingAxisW8( hullA, hullB, xfB, earlyReturn );
+	}
+#else
+	B3_UNUSED( simdWidth );
+#endif
 
-b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn )
-{
-	return b3ComputeSeparatingAxisW( hullA, hullB, xfB, earlyReturn );
-}
-
-#elif defined( B3_SIMD_HAS_WIDTH_8 )
-
-b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn )
-{
-	return b3ComputeSeparatingAxisW8( hullA, hullB, xfB, earlyReturn );
-}
-
-#elif defined( B3_SIMD_HAS_WIDTH_4 )
-
-b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn )
-{
 	return b3ComputeSeparatingAxisW4( hullA, hullB, xfB, earlyReturn );
 }
 
-#endif
+b3AxisQuery b3ComputeSeparatingAxis( const b3HullData* hullA, const b3HullData* hullB, b3Transform xfB, bool earlyReturn )
+{
+	return b3ComputeSeparatingAxisAtWidth( hullA, hullB, xfB, earlyReturn, b3GetSIMDWidth() );
+}
 
-void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* hullA, const b3HullData* hullB,
-					 b3Transform transformBtoA, b3SATCache* cache )
+void b3CollideHullsAtWidth( b3LocalManifold* manifold, int capacity, const b3HullData* hullA, const b3HullData* hullB,
+							b3Transform transformBtoA, b3SATCache* cache, int simdWidth )
 {
 	manifold->pointCount = 0;
 
@@ -1474,7 +1454,7 @@ void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* 
 			// This case is for testing
 		case b3_manualFaceAxisA:
 		{
-			b3AxisQuery axisQuery = b3ComputeSeparatingAxis( hullA, hullB, transformBtoA, false );
+			b3AxisQuery axisQuery = b3ComputeSeparatingAxisAtWidth( hullA, hullB, transformBtoA, false, simdWidth );
 			b3SeparatingAxis faceQuery = axisQuery.faceA;
 			b3BuildFaceAContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
 			return;
@@ -1483,7 +1463,7 @@ void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* 
 			// This case is for testing
 		case b3_manualFaceAxisB:
 		{
-			b3AxisQuery axisQuery = b3ComputeSeparatingAxis( hullA, hullB, transformBtoA, false );
+			b3AxisQuery axisQuery = b3ComputeSeparatingAxisAtWidth( hullA, hullB, transformBtoA, false, simdWidth );
 			b3SeparatingAxis faceQuery = axisQuery.faceB;
 			b3BuildFaceBContact( manifold, capacity, hullA, hullB, transformBtoA, faceQuery, cache );
 			return;
@@ -1492,7 +1472,7 @@ void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* 
 			// This case is for testing
 		case b3_manualEdgePairAxis:
 		{
-			b3AxisQuery axisQuery = b3ComputeSeparatingAxis( hullA, hullB, transformBtoA, false );
+			b3AxisQuery axisQuery = b3ComputeSeparatingAxisAtWidth( hullA, hullB, transformBtoA, false, simdWidth );
 			b3SeparatingAxis edgeQuery = axisQuery.edge;
 			if ( edgeQuery.indexA != B3_NULL_INDEX )
 			{
@@ -1509,7 +1489,7 @@ void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* 
 	manifold->pointCount = 0;
 	*cache = (b3SATCache){ 0 };
 
-	b3AxisQuery axisQuery = b3ComputeSeparatingAxis( hullA, hullB, transformBtoA, true );
+	b3AxisQuery axisQuery = b3ComputeSeparatingAxisAtWidth( hullA, hullB, transformBtoA, true, simdWidth );
 
 	if ( axisQuery.separatedFeature != b3_invalidAxis )
 	{
@@ -1611,4 +1591,10 @@ void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* 
 			*cache = edgeCache;
 		}
 	}
+}
+
+void b3CollideHulls( b3LocalManifold* manifold, int capacity, const b3HullData* hullA, const b3HullData* hullB,
+					 b3Transform transformBtoA, b3SATCache* cache )
+{
+	b3CollideHullsAtWidth( manifold, capacity, hullA, hullB, transformBtoA, cache, b3GetSIMDWidth() );
 }

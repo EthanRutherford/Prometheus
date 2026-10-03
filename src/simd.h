@@ -25,28 +25,14 @@
 #include "simd/x86_common.h"
 #endif
 
-#if defined( B3_SIMD_DYNAMIC_DISPATCH )
-#include "simd/feature_detection.h"
-#endif
-
 #else
 
 #include "simd/scalar.h"
 
 #endif
 
-static inline int b3GetSIMDWidth( void )
-{
-#if defined( B3_SIMD_DYNAMIC_DISPATCH )
-	return b3SupportsW8() ? 8 : 4;
-#elif defined( B3_SIMD_HAS_WIDTH_8 )
-	return 8;
-#elif defined( B3_SIMD_HAS_WIDTH_4 )
-	return 4;
-#else
-	return 1;
-#endif
-}
+int b3GetSIMDWidth( void );
+void b3SetSIMDWidth( int width );
 
 #if defined ( B3_SIMD_HAS_WIDTH_4 )
 

@@ -1057,173 +1057,94 @@ void b3StoreImpulses_Overflow( b3StepContext* context )
 	b3StoreImpulses_Mesh( block, context, 0 );
 }
 
-#if defined( B3_SIMD_DYNAMIC_DISPATCH )
-
-/* Dispatcher declarations */
-
-int wideContactConstraintByteCount = -1;
-void dispatchPrepare( b3SolverBlock block, b3StepContext* context );
-void dispatchWarmStart( b3SolverBlock block, b3StepContext* context );
-void dispatchPush( b3SolverBlock block, b3StepContext* context );
-void dispatchSolve( b3SolverBlock block, b3StepContext* context );
-void dispatchApplyRestitution( b3SolverBlock block, b3StepContext* context );
-void dispatchStoreImpulses( b3SolverBlock block, b3StepContext* context, int workerIndex );
-
-/* Dynamic dispatch function pointer initializations */
-
-void ( *b3PrepareContacts_ConvexW )( b3SolverBlock block, b3StepContext* context ) = dispatchPrepare;
-void ( *b3WarmStartContacts_ConvexW )( b3SolverBlock block, b3StepContext* context ) = dispatchWarmStart;
-void ( *b3PushContacts_ConvexW )( b3SolverBlock block, b3StepContext* context ) = dispatchPush;
-void ( *b3SolveContacts_ConvexW )( b3SolverBlock block, b3StepContext* context ) = dispatchSolve;
-void ( *b3ApplyRestitution_ConvexW )( b3SolverBlock block, b3StepContext* context ) = dispatchApplyRestitution;
-void ( *b3StoreImpulses_ConvexW )( b3SolverBlock block, b3StepContext* context, int workerIndex ) = dispatchStoreImpulses;
-
-/* Dispatcher function definitions */
-
-#define B3_SIMD_DISPATCH( name, ... )                                                                                            \
-	do                                                                                                                           \
-	{                                                                                                                            \
-		b3SupportsW8() ? ( name = name##8 ) : ( name = name##4 );                                                               \
-		name( __VA_ARGS__ );                                                                                                     \
-	}                                                                                                                            \
-	while ( 0 )
-
-void dispatchPrepare( b3SolverBlock block, b3StepContext* context )
-{
-	B3_SIMD_DISPATCH( b3PrepareContacts_ConvexW, block, context );
-}
-void dispatchWarmStart( b3SolverBlock block, b3StepContext* context )
-{
-	B3_SIMD_DISPATCH( b3WarmStartContacts_ConvexW, block, context );
-}
-void dispatchPush( b3SolverBlock block, b3StepContext* context )
-{
-	B3_SIMD_DISPATCH( b3PushContacts_ConvexW, block, context );
-}
-void dispatchSolve( b3SolverBlock block, b3StepContext* context )
-{
-	B3_SIMD_DISPATCH( b3SolveContacts_ConvexW, block, context );
-}
-void dispatchApplyRestitution( b3SolverBlock block, b3StepContext* context )
-{
-	B3_SIMD_DISPATCH( b3ApplyRestitution_ConvexW, block, context );
-}
-void dispatchStoreImpulses( b3SolverBlock block, b3StepContext* context, int workerIndex )
-{
-	B3_SIMD_DISPATCH( b3StoreImpulses_ConvexW, block, context, workerIndex );
-}
-
-/* public interface */
-
 void b3PrepareContacts_Convex( b3SolverBlock block, b3StepContext* context )
 {
-	b3PrepareContacts_ConvexW( block, context );
-}
-void b3WarmStartContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3WarmStartContacts_ConvexW( block, context );
-}
-void b3PushContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3PushContacts_ConvexW( block, context );
-}
-void b3SolveContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3SolveContacts_ConvexW( block, context );
-}
-void b3ApplyRestitution_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3ApplyRestitution_ConvexW( block, context );
-}
-void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int workerIndex )
-{
-	b3StoreImpulses_ConvexW( block, context, workerIndex );
-}
-int b3GetWideContactConstraintByteCount( void )
-{
-	if ( wideContactConstraintByteCount == -1 )
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( context->world->simdWidth == 8 )
 	{
-		wideContactConstraintByteCount =
-			b3SupportsW8() ? b3GetWideContactConstraintByteCountW8() : b3GetWideContactConstraintByteCountW4();
+		b3PrepareContacts_ConvexW8( block, context );
+		return;
 	}
+#endif
 
-	return wideContactConstraintByteCount;
-}
-
-#undef B3_SIMD_DISPATCH
-
-#elif defined( B3_SIMD_HAS_WIDTH_8 )
-
-void b3PrepareContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3PrepareContacts_ConvexW8( block, context );
-}
-
-void b3WarmStartContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3WarmStartContacts_ConvexW8( block, context );
-}
-
-void b3PushContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3PushContacts_ConvexW8( block, context );
-}
-
-void b3SolveContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3SolveContacts_ConvexW8( block, context );
-}
-
-void b3ApplyRestitution_Convex( b3SolverBlock block, b3StepContext* context )
-{
-	b3ApplyRestitution_ConvexW8( block, context );
-}
-
-void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int workerIndex )
-{
-	b3StoreImpulses_ConvexW8( block, context, workerIndex );
-}
-
-int b3GetWideContactConstraintByteCount( void )
-{
-	return b3GetWideContactConstraintByteCountW8();
-}
-
-#elif defined( B3_SIMD_HAS_WIDTH_4 )
-
-void b3PrepareContacts_Convex( b3SolverBlock block, b3StepContext* context )
-{
 	b3PrepareContacts_ConvexW4( block, context );
 }
 
 void b3WarmStartContacts_Convex( b3SolverBlock block, b3StepContext* context )
 {
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( context->world->simdWidth == 8 )
+	{
+		b3WarmStartContacts_ConvexW8( block, context );
+		return;
+	}
+#endif
+
 	b3WarmStartContacts_ConvexW4( block, context );
 }
 
 void b3PushContacts_Convex( b3SolverBlock block, b3StepContext* context )
 {
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( context->world->simdWidth == 8 )
+	{
+		b3PushContacts_ConvexW8( block, context );
+		return;
+	}
+#endif
+
 	b3PushContacts_ConvexW4( block, context );
 }
 
 void b3SolveContacts_Convex( b3SolverBlock block, b3StepContext* context )
 {
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( context->world->simdWidth == 8 )
+	{
+		b3SolveContacts_ConvexW8( block, context );
+		return;
+	}
+#endif
+
 	b3SolveContacts_ConvexW4( block, context );
 }
 
 void b3ApplyRestitution_Convex( b3SolverBlock block, b3StepContext* context )
 {
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( context->world->simdWidth == 8 )
+	{
+		b3ApplyRestitution_ConvexW8( block, context );
+		return;
+	}
+#endif
+
 	b3ApplyRestitution_ConvexW4( block, context );
 }
 
 void b3StoreImpulses_Convex( b3SolverBlock block, b3StepContext* context, int workerIndex )
 {
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( context->world->simdWidth == 8 )
+	{
+		b3StoreImpulses_ConvexW8( block, context, workerIndex );
+		return;
+	}
+#endif
+
 	b3StoreImpulses_ConvexW4( block, context, workerIndex );
 }
 
-int b3GetWideContactConstraintByteCount( void )
+int b3GetWideContactConstraintByteCount( int simdWidth )
 {
+#if defined( B3_SIMD_HAS_WIDTH_8 )
+	if ( simdWidth == 8 )
+	{
+		return b3GetWideContactConstraintByteCountW8();
+	}
+#else
+	B3_UNUSED( simdWidth );
+#endif
+
 	return b3GetWideContactConstraintByteCountW4();
 }
-
-#endif

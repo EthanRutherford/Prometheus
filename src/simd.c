@@ -5,6 +5,44 @@
 
 #include "simd.h"
 
+#include "platform.h"
+
+#if defined( B3_SIMD_DYNAMIC_DISPATCH )
+#include "simd/feature_detection.h"
+#endif
+
+static b3AtomicInt b3_simdWidth;
+
+static int b3DetectSIMDWidth( void )
+{
+#if defined( B3_SIMD_DYNAMIC_DISPATCH )
+	return b3SupportsW8() ? 8 : 4;
+#elif defined( B3_SIMD_HAS_WIDTH_8 )
+	return 8;
+#else
+	return 4;
+#endif
+}
+
+int b3GetSIMDWidth( void )
+{
+	int width = b3AtomicLoadInt( &b3_simdWidth );
+	if ( width == 0 )
+	{
+		width = b3DetectSIMDWidth();
+		b3AtomicStoreInt( &b3_simdWidth, width );
+	}
+
+	return width;
+}
+
+void b3SetSIMDWidth( int width )
+{
+	B3_ASSERT( width == 0 || width == 4 || width == 8 );
+	B3_ASSERT( width != 8 || b3DetectSIMDWidth() == 8 );
+	b3AtomicStoreInt( &b3_simdWidth, width );
+}
+
 #if defined( B3_SIMD_SSE2 )
 
 #define B3_TRANSPOSE3( C1, C2, C3 )                                                                                              \
