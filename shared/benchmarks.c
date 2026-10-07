@@ -786,6 +786,77 @@ void DestroyTrees( void )
 	memset( &g_treeData, 0, sizeof( g_treeData ) );
 }
 
+struct
+{
+	b3MeshData* meshData;
+} g_meshDropData;
+
+void CreateMeshDropBenchmark( b3WorldId worldId )
+{
+	memset( &g_meshDropData, 0, sizeof( g_meshDropData ) );
+
+	int meshGridCount = 120;
+	int borderCount = 10;
+	float cellWidth = 1.0f;
+
+	{
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		b3BodyId groundId = b3CreateBody( worldId, &bodyDef );
+
+		float rowHz = 0.1f;
+		float columnHz = 0.2f;
+		float groundAmplitude = 0.5f;
+
+		g_meshDropData.meshData =
+			b3CreateWaveMesh( meshGridCount, meshGridCount, cellWidth, groundAmplitude, rowHz, columnHz );
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		shapeDef.filter.categoryBits = 1;
+		b3CreateMeshShape( groundId, &shapeDef, g_meshDropData.meshData, b3Vec3_one );
+	}
+
+	{
+		b3BoxHull box = b3MakeBoxHull( 0.02f, 0.2f, 0.04f );
+
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		bodyDef.type = b3_dynamicBody;
+
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		shapeDef.baseMaterial.rollingResistance = 0.1f;
+
+		// Don't allow shapes to collide with each other.
+		shapeDef.filter.categoryBits = 2;
+		shapeDef.filter.maskBits = 1;
+
+		g_randomSeed = 3963634789;
+
+		int gridCount = BENCHMARK_DEBUG ? 20 : 100;
+		float spacing = cellWidth * ( meshGridCount - 2 * borderCount ) / gridCount;
+		float offset = 0.5f * spacing * ( 1 - gridCount );
+
+		for ( int i = 0; i < gridCount; ++i )
+		{
+			for ( int j = 0; j < gridCount; ++j )
+			{
+				b3Vec3 linearVelocity = RandomVec3Uniform( -1.0f, 1.0f );
+				b3Vec3 angularVelocity = RandomVec3Uniform( -5.0f, 5.0f );
+
+				bodyDef.position = (b3Pos){ offset + spacing * i, 5.0f, offset + spacing * j };
+				bodyDef.linearVelocity = linearVelocity;
+				bodyDef.angularVelocity = angularVelocity;
+				b3BodyId bodyId = b3CreateBody( worldId, &bodyDef );
+
+				b3CreateHullShape( bodyId, &shapeDef, &box.base );
+			}
+		}
+	}
+}
+
+void DestroyMeshDropBenchmark( void )
+{
+	b3DestroyMesh( g_meshDropData.meshData );
+	memset( &g_meshDropData, 0, sizeof( g_meshDropData ) );
+}
+
 struct JunkyardData
 {
 	b3BodyId pusherId;
@@ -908,42 +979,8 @@ void GetConvexPileCapacity( b3Capacity* capacity )
 #ifdef NDEBUG
 	capacity->dynamicShapeCount = 5120;
 	capacity->dynamicBodyCount = 5120;
-	capacity->contactCount = 50 * 1024;
+	capacity->contactCount = 64 * 1024;
 #endif
-}
-
-// PEEL's BasicRandom, kept verbatim so the point set matches the original
-typedef struct ConvexPileRandom
-{
-	unsigned int state;
-} ConvexPileRandom;
-
-static unsigned int NextConvexPileRandom( ConvexPileRandom* rng )
-{
-	rng->state = rng->state * 2147001325u + 715136305u;
-	return rng->state;
-}
-
-// Float in [-0.5, 0.5]
-static float ConvexPileRandomFloat( ConvexPileRandom* rng )
-{
-	return (float)( NextConvexPileRandom( rng ) & 0xffff ) / 65535.0f - 0.5f;
-}
-
-// Uniform random direction, rejection sampled inside the unit sphere then pushed to the surface
-static b3Vec3 UnitRandomPoint( ConvexPileRandom* rng )
-{
-	b3Vec3 point;
-	float lengthSq;
-	do
-	{
-		point.x = ConvexPileRandomFloat( rng );
-		point.y = ConvexPileRandomFloat( rng );
-		point.z = ConvexPileRandomFloat( rng );
-		lengthSq = b3Dot( point, point );
-	} while ( lengthSq > 0.25f );
-
-	return b3Normalize( point );
 }
 
 void CreateConvexPile( b3WorldId worldId )
@@ -962,19 +999,9 @@ void CreateConvexPile( b3WorldId worldId )
 	int countZ = 8;
 	int layers = BENCHMARK_DEBUG ? 10 : 80;
 	float amplitude = 2.0f;
-	int pointCount = 32;
 	float scatter = 2.0f * amplitude;
 
-	// Hull around random points on a sphere of radius amplitude
-	assert( pointCount <= 64 );
-	b3Vec3 points[64];
-	ConvexPileRandom rng = { 42 };
-	for ( int i = 0; i < pointCount; ++i )
-	{
-		points[i] = b3MulSV( amplitude, UnitRandomPoint( &rng ) );
-	}
-
-	b3HullData* convex = b3CreateHull( points, pointCount, pointCount );
+	b3HullData* convex = b3CreateComplexHull( amplitude );
 
 	b3BodyDef bodyDef = b3DefaultBodyDef();
 	bodyDef.type = b3_dynamicBody;

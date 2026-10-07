@@ -6,6 +6,7 @@ set(BOX3D_TEST_FILES
     test_bitset.c
 	test_body.c
 	test_body_query.c
+	test_broad_phase.c
 	test_collision.c
 	test_compound.c
 	test_container.c
@@ -25,6 +26,7 @@ set(BOX3D_TEST_FILES
 	test_mover.c
     test_name_cache.c
     test_recording.c
+    test_restitution.c
     test_sat.c
     test_shape.c
     test_table.c
@@ -48,6 +50,10 @@ endif()
 
 if(BOX3D_DISABLE_SIMD)
 	target_compile_definitions(test PRIVATE BOX3D_DISABLE_SIMD)
+endif()
+
+if(NOT BOX3D_AVX2)
+	target_compile_definitions(test PRIVATE BOX3D_DISABLE_AVX2)
 endif()
 
 target_link_libraries(test PRIVATE box3d shared)

@@ -188,7 +188,7 @@ B3_INLINE const b3HullFace* b3GetHullFaces( const b3HullData* hull )
 
 /// Get read only SOA vertices. This is an array of vertices with all x values,
 /// y values, and z values as separate arrays. The array lengths are padded to
-/// a multiple of 4. The padded values are repeats of the first value.
+/// a multiple of 8. The padded values are repeats of the first value.
 B3_INLINE const float* b3GetHullSoaVertices( const b3HullData* hull )
 {
 	if ( hull->soaVertexOffset == 0 )
@@ -201,7 +201,7 @@ B3_INLINE const float* b3GetHullSoaVertices( const b3HullData* hull )
 
 /// Get read only SOA unit normal vectors. This is an array of normals with all x values,
 /// y values, and z values as separate arrays. The array lengths are padded to
-/// a multiple of 4. The padded values are repeats of the first value.
+/// a multiple of 8. The padded values are 0.
 B3_INLINE const float* b3GetHullSoaNormals( const b3HullData* hull )
 {
 	if ( hull->soaNormalOffset == 0 )
@@ -212,6 +212,17 @@ B3_INLINE const float* b3GetHullSoaNormals( const b3HullData* hull )
 	return (const float*)( (intptr_t)hull + hull->soaNormalOffset );
 }
 
+/// Get the dot products of the two adjacent face normals for each full edge.
+B3_INLINE const float* b3GetHullEdgeCosines( const b3HullData* hull )
+{
+	if ( hull->edgeCosineOffset == 0 )
+	{
+		return NULL;
+	}
+
+	return (const float*)( (intptr_t)hull + hull->edgeCosineOffset );
+}
+
 /// Create a tessellated cylinder as a hull.
 B3_API b3HullData* b3CreateCylinder( float height, float radius, float yOffset, int sides );
 
@@ -220,6 +231,9 @@ B3_API b3HullData* b3CreateCone( float height, float radius1, float radius2, int
 
 /// Create a rock shaped hull.
 B3_API b3HullData* b3CreateRock( float radius );
+
+// Hull of 32 pseudo random points on a sphere. From the convex pile hull in PEEL.
+B3_API b3HullData* b3CreateComplexHull( float radius );
 
 /// Create a generic convex hull. This can fail if B3_MAX_HULL_VERTICES, B3_MAX_HULL_FACES,
 /// or B3_MAX_HULL_EDGES is exceeded.

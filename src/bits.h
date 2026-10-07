@@ -1,7 +1,7 @@
-#include <immintrin.h>
 #include <stdint.h>
 
 #if defined( __GNUC__ ) || defined( __clang__ )
+#include <immintrin.h>
 
 static inline int countr_zero_32( uint32_t x )
 {

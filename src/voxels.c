@@ -341,7 +341,7 @@ typedef struct MassAppenderContext
 	b3MassData* voxelMasses;
 } MassAppenderContext;
 
-void MassAppender( uint64_t code, uint32_t index, void* context )
+static void MassAppender( uint64_t code, uint32_t index, void* context )
 {
 	MassAppenderContext* ma = (MassAppenderContext*)context;
 	b3MassData* voxelMass = ma->voxelMasses + index;
@@ -403,11 +403,11 @@ b3AABB b3ComputeVoxelAABB( const b3Voxels* shape, b3Transform transform )
 bool b3OverlapVoxels( const b3Voxels* shape, b3Transform shapeTransform, const b3ShapeProxy* proxy )
 {
 	// TODO: implement
-	printf( "b3OverlapVoxels: not implemented\n" );
+	b3Log( "b3OverlapVoxels: not implemented\n" );
 	return false;
 }
 
-float rayBoxIntersect( b3Vec3 origin, b3Vec3 invDir, b3AABB bounds )
+static float rayBoxIntersect( b3Vec3 origin, b3Vec3 invDir, b3AABB bounds )
 {
 	b3Vec3 t1 = b3Mul( b3Sub( bounds.lowerBound, origin ), invDir );
 	b3Vec3 t2 = b3Mul( b3Sub( bounds.upperBound, origin ), invDir );
@@ -420,7 +420,7 @@ float rayBoxIntersect( b3Vec3 origin, b3Vec3 invDir, b3AABB bounds )
 	return ( tmax >= 0 && tmax >= tmin ) ? max( tmin, 0.0f ) : INFINITY;
 }
 
-float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3Vec3 origin, b3Vec3 dir, float t )
+static float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3Vec3 origin, b3Vec3 dir, float t )
 {
 	b3Vec3i flipMask = { dir.x > 0, dir.y > 0, dir.z > 0 };
 	uint32_t mirrorMask = ( flipMask.x ? 0x3 << 0 : 0 ) | ( flipMask.y ? 0x3 << 2 : 0 ) | ( flipMask.z ? 0x3 << 4 : 0 );
@@ -567,7 +567,7 @@ b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* i
 	b3CastOutput output = { 0 };
 
 	// TODO: implement
-	printf( "b3ShapeCastVoxels: not implemented\n" );
+	b3Log( "b3ShapeCastVoxels: not implemented\n" );
 
 	return output;
 }
@@ -575,7 +575,7 @@ b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* i
 int b3CollideMoverAndVoxels( b3PlaneResult* results, int capacity, const b3Voxels* shape, const b3Capsule* mover )
 {
 	// TODO: implement
-	printf( "b3CollideMoverAndVoxels: not implemented\n" );
+	b3Log( "b3CollideMoverAndVoxels: not implemented\n" );
 	return 0;
 }
 

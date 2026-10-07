@@ -1178,9 +1178,9 @@ uint32_t b3RecInternCompound( b3Recording* rec, const b3CompoundData* compound )
 	int byteCount = compound->byteCount;
 	uint8_t* bytes = b3Alloc( (size_t)byteCount );
 	memcpy( bytes, compound, (size_t)byteCount );
-	// Null the tree node pointer in the copy so the canonical bytes are pointer-free.
+	// Null the tree pointers in the copy so the canonical bytes are pointer-free.
 	// b3ConvertBytesToCompound fixes it back on load via nodeOffset.
-	( (b3CompoundData*)bytes )->tree.nodes = NULL;
+	b3ConvertCompoundToBytes( (b3CompoundData*)bytes );
 	uint64_t h = b3Hash64NonZero( bytes, byteCount );
 	return b3InternGeometry( &rec->registry, b3_geometryCompound, h, bytes, byteCount );
 }
