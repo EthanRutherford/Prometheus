@@ -65,6 +65,26 @@ static uint32_t b3ComputeLayoutHash( void )
 	MIX( sizeof( b3DynamicTree ) )
 	MIX( sizeof( b3TreeNode ) )
 	MIX( sizeof( b3TreeProxy ) )
+	MIX( sizeof( b3HullData ) )
+	MIX( sizeof( b3HullVertex ) )
+	MIX( sizeof( b3HullHalfEdge ) )
+	MIX( sizeof( b3HullFace ) )
+	MIX( sizeof( b3Plane ) )
+	MIX( sizeof( b3MeshData ) )
+	MIX( sizeof( b3MeshNode ) )
+	MIX( sizeof( b3MeshTriangle ) )
+	MIX( sizeof( b3HeightFieldData ) )
+	MIX( sizeof( b3CompoundData ) )
+	MIX( sizeof( b3CompoundCapsule ) )
+	MIX( sizeof( b3CompoundSphere ) )
+	MIX( B3_HULL_VERSION & 0xFFFFFFFFu )
+	MIX( B3_HULL_VERSION >> 32 )
+	MIX( B3_MESH_VERSION & 0xFFFFFFFFu )
+	MIX( B3_MESH_VERSION >> 32 )
+	MIX( B3_HEIGHT_FIELD_VERSION & 0xFFFFFFFFu )
+	MIX( B3_HEIGHT_FIELD_VERSION >> 32 )
+	MIX( B3_COMPOUND_VERSION & 0xFFFFFFFFu )
+	MIX( B3_COMPOUND_VERSION >> 32 )
 	MIX( sizeof( b3SetItem ) )
 	MIX( sizeof( b3IdPool ) )
 	MIX( sizeof( b3SurfaceMaterial ) )
@@ -780,11 +800,12 @@ static void b3DesShapes( b3SnapReader* r, b3World* world, b3RecReader* rdr )
 					break;
 				}
 				b3RegistrySlot* slot = b3RecGetSlot( rdr, gid, b3_geometryCompound );
-				dst->compound = slot != NULL ? b3RecGetLiveCompound( slot ) : NULL;
-				if ( dst->compound == NULL )
+				if ( slot == NULL )
 				{
 					r->ok = false;
+					break;
 				}
+				dst->compound = (const b3CompoundData*)slot->bytes;
 				break;
 			}
 			default:
