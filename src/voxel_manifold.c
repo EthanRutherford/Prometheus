@@ -1458,7 +1458,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 
 static void collideVoxVox( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
 {
-	printf( "collideVoxVox not implemented\n" );
+	b3Log( "collideVoxVox not implemented\n" );
 }
 
 typedef struct VoxCluster

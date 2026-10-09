@@ -214,7 +214,7 @@ if (MSVC)
 	target_compile_options(box3d PRIVATE /wd4710 )
 
 	if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-		target_compile_options(box3d PRIVATE -Wmissing-prototypes)
+		target_compile_options(box3d PRIVATE -Wmissing-prototypes -mbmi2)
 	endif()
 
 	if (BOX3D_AVX2 AND NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_ARCHITECTURE_ID MATCHES "^(x64|X86)$")
