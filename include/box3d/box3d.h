@@ -1006,6 +1006,9 @@ B3_API b3Mesh b3Shape_GetMesh( b3ShapeId shapeId );
 /// Get the shape's height field. Asserts the type is correct.
 B3_API const b3HeightFieldData* b3Shape_GetHeightField( b3ShapeId shapeId );
 
+/// Get the shape's compound. Asserts the type is correct.
+B3_API const b3CompoundData* b3Shape_GetCompound( b3ShapeId shapeId );
+
 /// Get the shape's voxel data. Asserts the type is correct.
 B3_API b3Voxels b3Shape_GetVoxels( b3ShapeId shapeId );
 
