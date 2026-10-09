@@ -445,7 +445,8 @@ void b3DestroyContact( b3World* world, b3Contact* contact, bool wakeBodies )
 	}
 	else if ( contact->flags & b3_simVoxelContact )
 	{
-		b3Array_Destroy( contact->voxelContact.voxelCache );
+		b3Array_Destroy( contact->voxelContact.queryCacheA.voxelCache );
+		b3Array_Destroy( contact->voxelContact.queryCacheB.voxelCache );
 	}
 
 	// Remove contact from the array that owns it

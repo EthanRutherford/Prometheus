@@ -478,7 +478,8 @@ void b3DestroyWorld( b3WorldId worldId )
 			}
 			else if ( contact->flags & b3_simVoxelContact )
 			{
-				b3Array_Destroy( contact->voxelContact.voxelCache );
+				b3Array_Destroy( contact->voxelContact.queryCacheA.voxelCache );
+				b3Array_Destroy( contact->voxelContact.queryCacheB.voxelCache );
 			}
 		}
 	}

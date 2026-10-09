@@ -106,10 +106,18 @@ typedef struct b3ConvexContact
 	b3ContactCache cache;
 } b3ConvexContact;
 
-typedef struct b3VoxelContact
+typedef struct b3VoxelQueryCache
 {
 	b3Array( b3VoxelCache ) voxelCache;
 	b3AABB queryBounds;
+	int edgeOffset;
+	int faceOffset;
+} b3VoxelQueryCache;
+
+typedef struct b3VoxelContact
+{
+	b3VoxelQueryCache queryCacheA;
+	b3VoxelQueryCache queryCacheB;
 } b3VoxelContact;
 
 // Represents the persistent interaction between two shapes

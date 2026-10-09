@@ -883,9 +883,16 @@ static void b3SerContacts( b3RecBuffer* buf, b3World* world )
 		}
 		else if ( copy.flags & b3_simVoxelContact )
 		{
-			copy.voxelContact.voxelCache.data = NULL;
-			copy.voxelContact.voxelCache.count = 0;
-			copy.voxelContact.voxelCache.capacity = 0;
+			copy.voxelContact.queryCacheA.voxelCache.data = NULL;
+			copy.voxelContact.queryCacheA.voxelCache.count = 0;
+			copy.voxelContact.queryCacheA.voxelCache.capacity = 0;
+			copy.voxelContact.queryCacheA.edgeOffset = 0;
+			copy.voxelContact.queryCacheA.faceOffset = 0;
+			copy.voxelContact.queryCacheB.voxelCache.data = NULL;
+			copy.voxelContact.queryCacheB.voxelCache.count = 0;
+			copy.voxelContact.queryCacheB.voxelCache.capacity = 0;
+			copy.voxelContact.queryCacheB.edgeOffset = 0;
+			copy.voxelContact.queryCacheB.faceOffset = 0;
 		}
 		b3SnapW_Bytes( buf, &copy, sizeof( b3Contact ) );
 
@@ -916,11 +923,21 @@ static void b3SerContacts( b3RecBuffer* buf, b3World* world )
 		}
 		else if ( c->flags & b3_simVoxelContact )
 		{
-			b3SnapW_I32( buf, c->voxelContact.voxelCache.count );
-			if ( c->voxelContact.voxelCache.count > 0 )
+			b3SnapW_I32( buf, c->voxelContact.queryCacheA.voxelCache.count );
+			if ( c->voxelContact.queryCacheA.voxelCache.count > 0 )
 			{
-				b3SnapW_Bytes( buf, c->voxelContact.voxelCache.data,
-							   c->voxelContact.voxelCache.count * (int)sizeof( b3VoxelCache ) );
+				b3SnapW_I32( buf, c->voxelContact.queryCacheA.edgeOffset );
+				b3SnapW_I32( buf, c->voxelContact.queryCacheA.faceOffset );
+				b3SnapW_Bytes( buf, c->voxelContact.queryCacheA.voxelCache.data,
+							   c->voxelContact.queryCacheA.voxelCache.count * (int)sizeof( b3VoxelCache ) );
+			}
+			b3SnapW_I32( buf, c->voxelContact.queryCacheB.voxelCache.count );
+			if ( c->voxelContact.queryCacheB.voxelCache.count > 0 )
+			{
+				b3SnapW_I32( buf, c->voxelContact.queryCacheB.edgeOffset );
+				b3SnapW_I32( buf, c->voxelContact.queryCacheB.faceOffset );
+				b3SnapW_Bytes( buf, c->voxelContact.queryCacheB.voxelCache.data,
+							   c->voxelContact.queryCacheB.voxelCache.count * (int)sizeof( b3VoxelCache ) );
 			}
 		}
 	}
@@ -954,9 +971,16 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 		}
 		else if ( dst->flags & b3_simVoxelContact )
 		{
-			dst->voxelContact.voxelCache.data = NULL;
-			dst->voxelContact.voxelCache.count = 0;
-			dst->voxelContact.voxelCache.capacity = 0;
+			dst->voxelContact.queryCacheA.voxelCache.data = NULL;
+			dst->voxelContact.queryCacheA.voxelCache.count = 0;
+			dst->voxelContact.queryCacheA.voxelCache.capacity = 0;
+			dst->voxelContact.queryCacheA.edgeOffset = 0;
+			dst->voxelContact.queryCacheA.faceOffset = 0;
+			dst->voxelContact.queryCacheB.voxelCache.data = NULL;
+			dst->voxelContact.queryCacheB.voxelCache.count = 0;
+			dst->voxelContact.queryCacheB.voxelCache.capacity = 0;
+			dst->voxelContact.queryCacheB.edgeOffset = 0;
+			dst->voxelContact.queryCacheB.faceOffset = 0;
 		}
 
 		bool isLive = ( dst->contactId == i );
@@ -1013,13 +1037,32 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 			}
 			if ( cacheCount > 0 )
 			{
+				dst->voxelContact.queryCacheA.edgeOffset = b3SnapR_I32( r );
+				dst->voxelContact.queryCacheA.faceOffset = b3SnapR_I32( r );
 				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( b3VoxelCache ), (int)sizeof( b3VoxelCache ) ) == false )
 				{
 					r->ok = false;
 					break;
 				}
-				b3Array_Resize( dst->voxelContact.voxelCache, cacheCount );
-				b3SnapR_Bytes( r, dst->voxelContact.voxelCache.data, cacheCount * (int)sizeof( b3VoxelCache ) );
+				b3Array_Resize( dst->voxelContact.queryCacheA.voxelCache, cacheCount );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheA.voxelCache.data, cacheCount * (int)sizeof( b3VoxelCache ) );
+			}
+			cacheCount = b3SnapR_I32( r );
+			if ( !r->ok )
+			{
+				break;
+			}
+			if ( cacheCount > 0 )
+			{
+				dst->voxelContact.queryCacheB.edgeOffset = b3SnapR_I32( r );
+				dst->voxelContact.queryCacheB.faceOffset = b3SnapR_I32( r );
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( b3VoxelCache ), (int)sizeof( b3VoxelCache ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				b3Array_Resize( dst->voxelContact.queryCacheB.voxelCache, cacheCount );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheB.voxelCache.data, cacheCount * (int)sizeof( b3VoxelCache ) );
 			}
 		}
 	}
