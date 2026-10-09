@@ -478,8 +478,16 @@ void b3DestroyWorld( b3WorldId worldId )
 			}
 			else if ( contact->flags & b3_simVoxelContact )
 			{
-				b3Array_Destroy( contact->voxelContact.queryCacheA.voxelCache );
-				b3Array_Destroy( contact->voxelContact.queryCacheB.voxelCache );
+				const b3VoxelQueryCache* queryCacheA = &contact->voxelContact.queryCacheA;
+				const b3VoxelQueryCache* queryCacheB = &contact->voxelContact.queryCacheB;
+				b3Free( queryCacheA->vMinX, queryCacheA->capacity * sizeof( float ) );
+				b3Free( queryCacheA->vMinY, queryCacheA->capacity * sizeof( float ) );
+				b3Free( queryCacheA->vMinZ, queryCacheA->capacity * sizeof( float ) );
+				b3Free( queryCacheA->flags, queryCacheA->capacity * sizeof( uint32_t ) );
+				b3Free( queryCacheB->vMinX, queryCacheB->capacity * sizeof( float ) );
+				b3Free( queryCacheB->vMinY, queryCacheB->capacity * sizeof( float ) );
+				b3Free( queryCacheB->vMinZ, queryCacheB->capacity * sizeof( float ) );
+				b3Free( queryCacheB->flags, queryCacheB->capacity * sizeof( uint32_t ) );
 			}
 		}
 	}

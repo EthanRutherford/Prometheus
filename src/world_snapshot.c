@@ -883,14 +883,20 @@ static void b3SerContacts( b3RecBuffer* buf, b3World* world )
 		}
 		else if ( copy.flags & b3_simVoxelContact )
 		{
-			copy.voxelContact.queryCacheA.voxelCache.data = NULL;
-			copy.voxelContact.queryCacheA.voxelCache.count = 0;
-			copy.voxelContact.queryCacheA.voxelCache.capacity = 0;
+			copy.voxelContact.queryCacheA.vMinX = NULL;
+			copy.voxelContact.queryCacheA.vMinY = NULL;
+			copy.voxelContact.queryCacheA.vMinZ = NULL;
+			copy.voxelContact.queryCacheA.flags = NULL;
+			copy.voxelContact.queryCacheA.count = 0;
+			copy.voxelContact.queryCacheA.capacity = 0;
 			copy.voxelContact.queryCacheA.edgeOffset = 0;
 			copy.voxelContact.queryCacheA.faceOffset = 0;
-			copy.voxelContact.queryCacheB.voxelCache.data = NULL;
-			copy.voxelContact.queryCacheB.voxelCache.count = 0;
-			copy.voxelContact.queryCacheB.voxelCache.capacity = 0;
+			copy.voxelContact.queryCacheB.vMinX = NULL;
+			copy.voxelContact.queryCacheB.vMinY = NULL;
+			copy.voxelContact.queryCacheB.vMinZ = NULL;
+			copy.voxelContact.queryCacheB.flags = NULL;
+			copy.voxelContact.queryCacheB.count = 0;
+			copy.voxelContact.queryCacheB.capacity = 0;
 			copy.voxelContact.queryCacheB.edgeOffset = 0;
 			copy.voxelContact.queryCacheB.faceOffset = 0;
 		}
@@ -923,21 +929,28 @@ static void b3SerContacts( b3RecBuffer* buf, b3World* world )
 		}
 		else if ( c->flags & b3_simVoxelContact )
 		{
-			b3SnapW_I32( buf, c->voxelContact.queryCacheA.voxelCache.count );
-			if ( c->voxelContact.queryCacheA.voxelCache.count > 0 )
+			const b3VoxelQueryCache* queryCacheA = &c->voxelContact.queryCacheA;
+			const b3VoxelQueryCache* queryCacheB = &c->voxelContact.queryCacheB;
+
+			b3SnapW_I32( buf, queryCacheA->count );
+			if ( queryCacheA->count > 0 )
 			{
-				b3SnapW_I32( buf, c->voxelContact.queryCacheA.edgeOffset );
-				b3SnapW_I32( buf, c->voxelContact.queryCacheA.faceOffset );
-				b3SnapW_Bytes( buf, c->voxelContact.queryCacheA.voxelCache.data,
-							   c->voxelContact.queryCacheA.voxelCache.count * (int)sizeof( b3VoxelCache ) );
+				b3SnapW_I32( buf, queryCacheA->edgeOffset );
+				b3SnapW_I32( buf, queryCacheA->faceOffset );
+				b3SnapW_Bytes( buf, queryCacheA->vMinX, queryCacheA->count * (int)sizeof( float ) );
+				b3SnapW_Bytes( buf, queryCacheA->vMinY, queryCacheA->count * (int)sizeof( float ) );
+				b3SnapW_Bytes( buf, queryCacheA->vMinZ, queryCacheA->count * (int)sizeof( float ) );
+				b3SnapW_Bytes( buf, queryCacheA->flags, queryCacheA->count * (int)sizeof( uint32_t ) );
 			}
-			b3SnapW_I32( buf, c->voxelContact.queryCacheB.voxelCache.count );
-			if ( c->voxelContact.queryCacheB.voxelCache.count > 0 )
+			b3SnapW_I32( buf, queryCacheB->count );
+			if ( queryCacheB->count > 0 )
 			{
-				b3SnapW_I32( buf, c->voxelContact.queryCacheB.edgeOffset );
-				b3SnapW_I32( buf, c->voxelContact.queryCacheB.faceOffset );
-				b3SnapW_Bytes( buf, c->voxelContact.queryCacheB.voxelCache.data,
-							   c->voxelContact.queryCacheB.voxelCache.count * (int)sizeof( b3VoxelCache ) );
+				b3SnapW_I32( buf, queryCacheB->edgeOffset );
+				b3SnapW_I32( buf, queryCacheB->faceOffset );
+				b3SnapW_Bytes( buf, queryCacheB->vMinX, queryCacheB->count * (int)sizeof( float ) );
+				b3SnapW_Bytes( buf, queryCacheB->vMinY, queryCacheB->count * (int)sizeof( float ) );
+				b3SnapW_Bytes( buf, queryCacheB->vMinZ, queryCacheB->count * (int)sizeof( float ) );
+				b3SnapW_Bytes( buf, queryCacheB->flags, queryCacheB->count * (int)sizeof( uint32_t ) );
 			}
 		}
 	}
@@ -971,14 +984,20 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 		}
 		else if ( dst->flags & b3_simVoxelContact )
 		{
-			dst->voxelContact.queryCacheA.voxelCache.data = NULL;
-			dst->voxelContact.queryCacheA.voxelCache.count = 0;
-			dst->voxelContact.queryCacheA.voxelCache.capacity = 0;
+			dst->voxelContact.queryCacheA.vMinX = NULL;
+			dst->voxelContact.queryCacheA.vMinY = NULL;
+			dst->voxelContact.queryCacheA.vMinZ = NULL;
+			dst->voxelContact.queryCacheA.flags = NULL;
+			dst->voxelContact.queryCacheA.count = 0;
+			dst->voxelContact.queryCacheA.capacity = 0;
 			dst->voxelContact.queryCacheA.edgeOffset = 0;
 			dst->voxelContact.queryCacheA.faceOffset = 0;
-			dst->voxelContact.queryCacheB.voxelCache.data = NULL;
-			dst->voxelContact.queryCacheB.voxelCache.count = 0;
-			dst->voxelContact.queryCacheB.voxelCache.capacity = 0;
+			dst->voxelContact.queryCacheB.vMinX = NULL;
+			dst->voxelContact.queryCacheB.vMinY = NULL;
+			dst->voxelContact.queryCacheB.vMinZ = NULL;
+			dst->voxelContact.queryCacheB.flags = NULL;
+			dst->voxelContact.queryCacheB.count = 0;
+			dst->voxelContact.queryCacheB.capacity = 0;
 			dst->voxelContact.queryCacheB.edgeOffset = 0;
 			dst->voxelContact.queryCacheB.faceOffset = 0;
 		}
@@ -1039,13 +1058,41 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 			{
 				dst->voxelContact.queryCacheA.edgeOffset = b3SnapR_I32( r );
 				dst->voxelContact.queryCacheA.faceOffset = b3SnapR_I32( r );
-				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( b3VoxelCache ), (int)sizeof( b3VoxelCache ) ) == false )
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( float ), (int)sizeof( float ) ) == false )
 				{
 					r->ok = false;
 					break;
 				}
-				b3Array_Resize( dst->voxelContact.queryCacheA.voxelCache, cacheCount );
-				b3SnapR_Bytes( r, dst->voxelContact.queryCacheA.voxelCache.data, cacheCount * (int)sizeof( b3VoxelCache ) );
+				dst->voxelContact.queryCacheA.vMinX = b3Alloc( cacheCount * (int)sizeof( float ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheA.vMinX, cacheCount * (int)sizeof( float ) );
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( float ), (int)sizeof( float ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				dst->voxelContact.queryCacheA.vMinY = b3Alloc( cacheCount * (int)sizeof( float ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheA.vMinY, cacheCount * (int)sizeof( float ) );
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( float ), (int)sizeof( float ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				dst->voxelContact.queryCacheA.vMinZ = b3Alloc( cacheCount * (int)sizeof( float ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheA.vMinZ, cacheCount * (int)sizeof( float ) );
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( uint32_t ), (int)sizeof( uint32_t ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				dst->voxelContact.queryCacheA.flags = b3Alloc( cacheCount * (int)sizeof( uint32_t ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheA.flags, cacheCount * (int)sizeof( uint32_t ) );
+
+				dst->voxelContact.queryCacheA.capacity = cacheCount;
+				dst->voxelContact.queryCacheA.count = cacheCount;
 			}
 			cacheCount = b3SnapR_I32( r );
 			if ( !r->ok )
@@ -1056,13 +1103,41 @@ static void b3DesContacts( b3SnapReader* r, b3World* world )
 			{
 				dst->voxelContact.queryCacheB.edgeOffset = b3SnapR_I32( r );
 				dst->voxelContact.queryCacheB.faceOffset = b3SnapR_I32( r );
-				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( b3VoxelCache ), (int)sizeof( b3VoxelCache ) ) == false )
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( float ), (int)sizeof( float ) ) == false )
 				{
 					r->ok = false;
 					break;
 				}
-				b3Array_Resize( dst->voxelContact.queryCacheB.voxelCache, cacheCount );
-				b3SnapR_Bytes( r, dst->voxelContact.queryCacheB.voxelCache.data, cacheCount * (int)sizeof( b3VoxelCache ) );
+				dst->voxelContact.queryCacheB.vMinX = b3Alloc( cacheCount * (int)sizeof( float ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheB.vMinX, cacheCount * (int)sizeof( float ) );
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( float ), (int)sizeof( float ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				dst->voxelContact.queryCacheB.vMinY = b3Alloc( cacheCount * (int)sizeof( float ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheB.vMinY, cacheCount * (int)sizeof( float ) );
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( float ), (int)sizeof( float ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				dst->voxelContact.queryCacheB.vMinZ = b3Alloc( cacheCount * (int)sizeof( float ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheB.vMinZ, cacheCount * (int)sizeof( float ) );
+
+				if ( b3SnapCheckCount( r, cacheCount, (int)sizeof( uint32_t ), (int)sizeof( uint32_t ) ) == false )
+				{
+					r->ok = false;
+					break;
+				}
+				dst->voxelContact.queryCacheB.flags = b3Alloc( cacheCount * (int)sizeof( uint32_t ) );
+				b3SnapR_Bytes( r, dst->voxelContact.queryCacheB.flags, cacheCount * (int)sizeof( uint32_t ) );
+
+				dst->voxelContact.queryCacheB.capacity = cacheCount;
+				dst->voxelContact.queryCacheB.count = cacheCount;
 			}
 		}
 	}

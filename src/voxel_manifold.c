@@ -135,13 +135,11 @@ static void cacheRefreshCallback( uint64_t code, uint32_t index, void* context )
 	if ( ( voxelFlags & b3_voxOccludedMask ) == b3_voxOccludedMask )
 		return;
 
-	b3VoxelCache* cache = ctx->cache->voxelCache.data + ctx->cache->voxelCache.count;
-	ctx->cache->voxelCache.count++;
-
-	cache->min.x = (float)b3DecodeVoxelX( code );
-	cache->min.y = (float)b3DecodeVoxelY( code );
-	cache->min.z = (float)b3DecodeVoxelZ( code );
-	cache->flags = voxelFlags;
+	*( ctx->cache->vMinX + ctx->cache->count ) = (float)b3DecodeVoxelX( code );
+	*( ctx->cache->vMinY + ctx->cache->count ) = (float)b3DecodeVoxelY( code );
+	*( ctx->cache->vMinZ + ctx->cache->count ) = (float)b3DecodeVoxelZ( code );
+	*( ctx->cache->flags + ctx->cache->count ) = voxelFlags;
+	ctx->cache->count++;
 }
 
 static bool refreshVoxCache( b3VoxelQueryCache* cache, const b3VoxelData* voxels, b3AABB bounds )
@@ -154,10 +152,17 @@ static bool refreshVoxCache( b3VoxelQueryCache* cache, const b3VoxelData* voxels
 	int maxVoxels = (int)( ( bounds.upperBound.x - bounds.lowerBound.x ) * ( bounds.upperBound.y - bounds.lowerBound.y ) *
 						   ( bounds.upperBound.z - bounds.lowerBound.z ) );
 
-	// clear the cache, reserve space, and gather new voxels
+	// clear the cache and reserve space for the maximum possible voxels
 	cache->queryBounds = bounds;
-	cache->voxelCache.count = 0;
-	b3Array_Reserve( cache->voxelCache, maxVoxels );
+	cache->count = 0;
+	if ( cache->capacity < maxVoxels )
+	{
+		cache->vMinX = b3Alloc( maxVoxels * (int)sizeof( float ) );
+		cache->vMinY = b3Alloc( maxVoxels * (int)sizeof( float ) );
+		cache->vMinZ = b3Alloc( maxVoxels * (int)sizeof( float ) );
+		cache->flags = b3Alloc( maxVoxels * (int)sizeof( uint32_t ) );
+		cache->capacity = maxVoxels;
+	}
 
 	CacheRefreshContext ctx = { .voxels = voxels, .cache = cache };
 	b3QueryVoxels( voxels, bounds, cacheRefreshCallback, &ctx );
@@ -359,11 +364,11 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 	// refresh the voxel cache
 	refreshVoxCache( context->cacheA, voxelsA.data, queryBounds );
 
-	for ( int i = 0; i < context->cacheA->voxelCache.count; i++ )
+	for ( int i = 0; i < context->cacheA->count; i++ )
 	{
-		b3Vec3 voxMin = context->cacheA->voxelCache.data[i].min;
+		b3Vec3 voxMin = { context->cacheA->vMinX[i], context->cacheA->vMinY[i], context->cacheA->vMinZ[i] };
 		b3Vec3 voxMax = b3Add( voxMin, b3Vec3Of( 1.0f ) );
-		uint32_t flags = context->cacheA->voxelCache.data[i].flags;
+		uint32_t flags = context->cacheA->flags[i];
 
 		// similar to the sphere case, we can skip voxels that are coplanar with nearer voxels
 		// in this case, we're actually using the bounding box of the capsule segment, rather than a
@@ -785,7 +790,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	refreshVoxCache( context->cacheA, voxelsA.data, queryBounds );
 
 	// early exit if no voxels were in the query bounds
-	if ( context->cacheA->voxelCache.count == 0 )
+	if ( context->cacheA->count == 0 )
 		return;
 
 	// hull points in voxel space
@@ -898,10 +903,10 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 	}
 
 	// perform sat tests for voxels
-	for ( int v = 0; v < context->cacheA->voxelCache.count; v++ )
+	for ( int v = 0; v < context->cacheA->count; v++ )
 	{
-		uint32_t flags = context->cacheA->voxelCache.data[v].flags;
-		b3Vec3 voxMin = context->cacheA->voxelCache.data[v].min;
+		uint32_t flags = context->cacheA->flags[v];
+		b3Vec3 voxMin = { context->cacheA->vMinX[v], context->cacheA->vMinY[v], context->cacheA->vMinZ[v] };
 		b3Vec3 voxCenter = b3Add( voxMin, b3Vec3Of( 0.5f ) );
 		b3Vec3 cDir = b3Sub( hullCenter, voxCenter );
 

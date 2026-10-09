@@ -28,14 +28,6 @@ typedef struct b3TriangleCache
 
 b3DeclareArray( b3TriangleCache );
 
-typedef struct b3VoxelCache
-{
-	b3Vec3 min;
-	uint32_t flags;
-} b3VoxelCache;
-
-b3DeclareArray( b3VoxelCache );
-
 enum b3ContactFlags
 {
 	// Set when the solid shapes are touching.
@@ -108,10 +100,17 @@ typedef struct b3ConvexContact
 
 typedef struct b3VoxelQueryCache
 {
-	b3Array( b3VoxelCache ) voxelCache;
-	b3AABB queryBounds;
+	float* vMinX;
+	float* vMinY;
+	float* vMinZ;
+	uint32_t* flags;
+
 	int edgeOffset;
 	int faceOffset;
+	int capacity;
+	int count;
+
+	b3AABB queryBounds;
 } b3VoxelQueryCache;
 
 typedef struct b3VoxelContact
