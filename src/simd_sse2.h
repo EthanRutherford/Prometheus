@@ -131,9 +131,19 @@ static inline b3FloatW4 b3GreaterThanW4( b3FloatW4 a, b3FloatW4 b )
 	return _mm_cmpgt_ps( a, b );
 }
 
+static inline b3FloatW4 b3GreaterOrEqualW4( b3FloatW4 a, b3FloatW4 b )
+{
+	return _mm_cmpge_ps( a, b );
+}
+
 static inline b3FloatW4 b3LessThanW4( b3FloatW4 a, b3FloatW4 b )
 {
 	return _mm_cmplt_ps( a, b );
+}
+
+static inline b3FloatW4 b3LessOrEqualW4( b3FloatW4 a, b3FloatW4 b )
+{
+	return _mm_cmple_ps( a, b );
 }
 
 static inline b3FloatW4 b3EqualsW4( b3FloatW4 a, b3FloatW4 b )

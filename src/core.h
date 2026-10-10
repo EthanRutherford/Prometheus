@@ -187,3 +187,13 @@ void b3JoinThread( b3Thread* t );
 void b3StrCpy( char* dst, int size, const char* src );
 
 uint64_t b3Hash64NonZero( const uint8_t* bytes, int n );
+
+// helpers for bit casting between int and float
+static inline float b3IntToFloat( int x )
+{
+	return *(float*)&x;
+}
+static inline int b3FloatToInt( float x )
+{
+	return *(int*)&x;
+}

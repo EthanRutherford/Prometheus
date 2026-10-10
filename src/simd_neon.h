@@ -126,9 +126,19 @@ static inline b3FloatW4 b3GreaterThanW4( b3FloatW4 a, b3FloatW4 b )
 	return vreinterpretq_f32_u32( vcgtq_f32( a, b ) );
 }
 
+static inline b3FloatW4 b3GreaterOrEqualW4( b3FloatW4 a, b3FloatW4 b )
+{
+	return vreinterpretq_f32_u32( vcgeq_f32( a, b ) );
+}
+
 static inline b3FloatW4 b3LessThanW4( b3FloatW4 a, b3FloatW4 b )
 {
 	return vreinterpretq_f32_u32( vcltq_f32( a, b ) );
+}
+
+static inline b3FloatW4 b3LessOrEqualW4( b3FloatW4 a, b3FloatW4 b )
+{
+	return vreinterpretq_f32_u32( vcleq_f32( a, b ) );
 }
 
 static inline b3FloatW4 b3EqualsW4( b3FloatW4 a, b3FloatW4 b )

@@ -131,9 +131,19 @@ static inline b3FloatW8 b3GreaterThanW8( b3FloatW8 a, b3FloatW8 b )
 	return _mm256_cmp_ps( a, b, _CMP_GT_OQ );
 }
 
+static inline b3FloatW8 b3GreaterOrEqualW8( b3FloatW8 a, b3FloatW8 b )
+{
+	return _mm256_cmp_ps( a, b, _CMP_GE_OQ );
+}
+
 static inline b3FloatW8 b3LessThanW8( b3FloatW8 a, b3FloatW8 b )
 {
 	return _mm256_cmp_ps( a, b, _CMP_LT_OQ );
+}
+
+static inline b3FloatW8 b3LessOrEqualW8( b3FloatW8 a, b3FloatW8 b )
+{
+	return _mm256_cmp_ps( a, b, _CMP_LE_OQ );
 }
 
 static inline b3FloatW8 b3EqualsW8( b3FloatW8 a, b3FloatW8 b )

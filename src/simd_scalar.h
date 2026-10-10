@@ -119,25 +119,23 @@ static inline b3FloatW4 b3SymClampW4( b3FloatW4 a, b3FloatW4 b )
 	return r;
 }
 
-// Logical operations on the scalar path are 0/1 float values. Not bit-wise like SIMD.
-
 static inline b3FloatW4 b3AndW4( b3FloatW4 a, b3FloatW4 b )
 {
 	b3FloatW4 r;
-	r.x = a.x != 0.0f && b.x != 0.0f ? 1.0f : 0.0f;
-	r.y = a.y != 0.0f && b.y != 0.0f ? 1.0f : 0.0f;
-	r.z = a.z != 0.0f && b.z != 0.0f ? 1.0f : 0.0f;
-	r.w = a.w != 0.0f && b.w != 0.0f ? 1.0f : 0.0f;
+	r.x = b3IntToFloat( b3FloatToInt( a.x ) & b3FloatToInt( b.x ) );
+	r.y = b3IntToFloat( b3FloatToInt( a.y ) & b3FloatToInt( b.y ) );
+	r.z = b3IntToFloat( b3FloatToInt( a.z ) & b3FloatToInt( b.z ) );
+	r.w = b3IntToFloat( b3FloatToInt( a.w ) & b3FloatToInt( b.w ) );
 	return r;
 }
 
 static inline b3FloatW4 b3OrW4( b3FloatW4 a, b3FloatW4 b )
 {
 	b3FloatW4 r;
-	r.x = a.x != 0.0f || b.x != 0.0f ? 1.0f : 0.0f;
-	r.y = a.y != 0.0f || b.y != 0.0f ? 1.0f : 0.0f;
-	r.z = a.z != 0.0f || b.z != 0.0f ? 1.0f : 0.0f;
-	r.w = a.w != 0.0f || b.w != 0.0f ? 1.0f : 0.0f;
+	r.x = b3IntToFloat( b3FloatToInt( a.x ) | b3FloatToInt( b.x ) );
+	r.y = b3IntToFloat( b3FloatToInt( a.y ) | b3FloatToInt( b.y ) );
+	r.z = b3IntToFloat( b3FloatToInt( a.z ) | b3FloatToInt( b.z ) );
+	r.w = b3IntToFloat( b3FloatToInt( a.w ) | b3FloatToInt( b.w ) );
 	return r;
 }
 
@@ -145,10 +143,10 @@ static inline b3FloatW4 b3OrW4( b3FloatW4 a, b3FloatW4 b )
 static inline b3FloatW4 b3AndNotW4( b3FloatW4 a, b3FloatW4 b )
 {
 	b3FloatW4 r;
-	r.x = a.x != 0.0f && b.x == 0.0f ? 1.0f : 0.0f;
-	r.y = a.y != 0.0f && b.y == 0.0f ? 1.0f : 0.0f;
-	r.z = a.z != 0.0f && b.z == 0.0f ? 1.0f : 0.0f;
-	r.w = a.w != 0.0f && b.w == 0.0f ? 1.0f : 0.0f;
+	r.x = b3IntToFloat( b3FloatToInt( a.x ) & ~b3FloatToInt( b.x ) );
+	r.y = b3IntToFloat( b3FloatToInt( a.y ) & ~b3FloatToInt( b.y ) );
+	r.z = b3IntToFloat( b3FloatToInt( a.z ) & ~b3FloatToInt( b.z ) );
+	r.w = b3IntToFloat( b3FloatToInt( a.w ) & ~b3FloatToInt( b.w ) );
 	return r;
 }
 
@@ -172,6 +170,16 @@ static inline b3FloatW4 b3GreaterThanW4( b3FloatW4 a, b3FloatW4 b )
 	return r;
 }
 
+static inline b3FloatW4 b3GreaterOrEqualW4( b3FloatW4 a, b3FloatW4 b )
+{
+	b3FloatW4 r;
+	r.x = a.x >= b.x ? 1.0f : 0.0f;
+	r.y = a.y >= b.y ? 1.0f : 0.0f;
+	r.z = a.z >= b.z ? 1.0f : 0.0f;
+	r.w = a.w >= b.w ? 1.0f : 0.0f;
+	return r;
+}
+
 static inline b3FloatW4 b3LessThanW4( b3FloatW4 a, b3FloatW4 b )
 {
 	b3FloatW4 r;
@@ -179,6 +187,16 @@ static inline b3FloatW4 b3LessThanW4( b3FloatW4 a, b3FloatW4 b )
 	r.y = a.y < b.y ? 1.0f : 0.0f;
 	r.z = a.z < b.z ? 1.0f : 0.0f;
 	r.w = a.w < b.w ? 1.0f : 0.0f;
+	return r;
+}
+
+static inline b3FloatW4 b3LessOrEqualW4( b3FloatW4 a, b3FloatW4 b )
+{
+	b3FloatW4 r;
+	r.x = a.x <= b.x ? 1.0f : 0.0f;
+	r.y = a.y <= b.y ? 1.0f : 0.0f;
+	r.z = a.z <= b.z ? 1.0f : 0.0f;
+	r.w = a.w <= b.w ? 1.0f : 0.0f;
 	return r;
 }
 
