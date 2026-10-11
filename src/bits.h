@@ -1,4 +1,3 @@
-#include <immintrin.h>
 #include <stdint.h>
 
 #if defined( __GNUC__ ) || defined( __clang__ )

@@ -29,6 +29,24 @@ static uint32_t attrSize = sizeof( b3VoxelAttrs );
 
 /// Voxel coordinate encoding and decoding
 
+// Determine whether to use the native BMI2 instructions for voxel encoding and decoding,
+// or fall back to a software implementation if the native BMI2 instructions are not available.
+#if defined( __znver1__ ) || defined( __znver2__ )
+// Force Zen 1 and Zen 2 to use the fast fallback math path
+#define USE_NATIVE_BMI2 0
+#elif defined( __BMI2__ ) || defined( __AVX2__ )
+	// GCC, Clang, and ICX automatically define __BMI2__ for Haswell+ or Zen3+
+#define USE_NATIVE_BMI2 1
+#include <immintrin.h>
+#elif defined( _MSC_VER ) && ( defined( _M_X64 ) || defined( _M_AMD64 ) ) && defined( __AVX2__ )
+	// MSVC project-wide flag check (/arch:AVX2 or /arch:AVX512)
+#define USE_NATIVE_BMI2 1
+#include <intrin.h>
+#else
+#define USE_NATIVE_BMI2 0
+#endif
+
+#if USE_NATIVE_BMI2 == 1
 // These masks interleave the bits of the integer x, y, and z coordinates of a voxel into a single 64-bit integer.
 // The ordering resembles a morton code, but rather than interleaving them zyxzyx, they're interleaved zzyyxx, which
 // orders the children of a node in a more traditional x + 4y + 16z order. This is not only easier to reason about for the
@@ -53,6 +71,49 @@ uint32_t b3DecodeVoxelZ( uint64_t code )
 {
 	return (uint32_t)_pext_u64( code, B3_VOXEL_Z_MASK );
 }
+#else
+static inline uint64_t depositPairs( uint64_t v )
+{
+	v &= 0x00000000001FFFFFULL;
+
+	v = ( v | ( v << 32 ) ) & 0x0000001F0000FFFFULL;
+	v = ( v | ( v << 16 ) ) & 0x001F0000FF0000FFULL;
+	v = ( v | ( v << 8 ) ) & 0x010F000F000F000FULL;
+	v = ( v | ( v << 4 ) ) & 0x10C30C30C30C30C3ULL;
+	v = ( v | ( v << 2 ) ) & 0x30C30C30C30C30C3ULL;
+
+	return v;
+}
+static inline uint32_t extractPairs( uint64_t v )
+{
+	v &= 0x30C30C30C30C30C3ULL;
+
+	v = ( v | ( v >> 2 ) ) & 0x10C30C30C30C30C3ULL;
+	v = ( v | ( v >> 4 ) ) & 0x010F000F000F000FULL;
+	v = ( v | ( v >> 8 ) ) & 0x001F0000FF0000FFULL;
+	v = ( v | ( v >> 16 ) ) & 0x0000001F0000FFFFULL;
+	v = ( v | ( v >> 32 ) ) & 0x00000000001FFFFFULL;
+
+	return (uint32_t)v;
+}
+
+uint64_t b3EncodeVoxel( uint32_t x, uint32_t y, uint32_t z )
+{
+	return depositPairs( x ) | depositPairs( y ) << 2 | depositPairs( z ) << 4;
+}
+uint32_t b3DecodeVoxelX( uint64_t code )
+{
+	return extractPairs( code );
+}
+uint32_t b3DecodeVoxelY( uint64_t code )
+{
+	return extractPairs( code >> 2 );
+}
+uint32_t b3DecodeVoxelZ( uint64_t code )
+{
+	return extractPairs( code >> 4 );
+}
+#endif
 
 /// Voxel bitmap creation and destruction
 
