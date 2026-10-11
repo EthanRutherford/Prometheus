@@ -241,7 +241,7 @@ void b3CreateContact( b3World* world, b3Shape* shapeA, b3Shape* shapeB, int chil
 	}
 
 	// todo impose these restrictions to make life easier
-	B3_ASSERT( shapeB->type == b3_sphereShape || shapeB->type == b3_capsuleShape || shapeB->type == b3_hullShape );
+	B3_ASSERT( shapeB->type == b3_sphereShape || shapeB->type == b3_capsuleShape || shapeB->type == b3_hullShape || shapeB->type == b3_voxelShape );
 	// B3_ASSERT( bodyB->type != b3_staticBody );
 
 	// Is either body static?

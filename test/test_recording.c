@@ -198,7 +198,7 @@ static int CrossWidthReplay( void )
 	b3CreateHullShape( groundId, &groundShape, &groundBox.base );
 
 	b3ShapeDef dynamicShape = b3DefaultShapeDef();
-	dynamicShape.density = 1.0f;
+	dynamicShape.baseMaterial.density = 1.0f;
 
 	for ( int i = 0; i < 18; ++i )
 	{

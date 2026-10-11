@@ -377,7 +377,7 @@ static int SingleRollingMixTest( int workerCount, DeterminismResult* reference )
 
 		seed = seed * 1664525u + 1013904223u;
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 		shapeDef.baseMaterial.rollingResistance = ( seed >> 28 ) < 5 ? 0.2f : 0.0f;
 
 		switch ( i % 3 )
@@ -480,7 +480,7 @@ static int SingleMeshMixTest( int workerCount, DeterminismResult* reference )
 
 		seed = seed * 1664525u + 1013904223u;
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 		shapeDef.baseMaterial.rollingResistance = ( seed >> 28 ) < 5 ? 0.2f : 0.0f;
 
 		switch ( ( seed >> 24 ) & 3 )

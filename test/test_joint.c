@@ -584,7 +584,7 @@ static int TestCreateJointClearsContacts( void )
 	b3BodyId bodyIdB = b3CreateBody( worldId, &bodyDef );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	b3BoxHull box = b3MakeBoxHull( 0.5f, 0.5f, 0.5f );
 	b3CreateHullShape( bodyIdA, &shapeDef, &box.base );
 	b3CreateHullShape( bodyIdB, &shapeDef, &box.base );

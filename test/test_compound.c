@@ -890,7 +890,7 @@ static int CompoundMeshContactMaterial( void )
 	sphereBodyDef.position = (b3Pos){ 0.0f, 3.0f, 0.0f };
 	b3BodyId sphereBodyId = b3CreateBody( worldId, &sphereBodyDef );
 	b3ShapeDef sphereShapeDef = b3DefaultShapeDef();
-	sphereShapeDef.density = 1.0f;
+	sphereShapeDef.baseMaterial.density = 1.0f;
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
 	b3CreateSphereShape( sphereBodyId, &sphereShapeDef, &sphere );
 

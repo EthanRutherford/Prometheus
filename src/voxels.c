@@ -35,11 +35,11 @@ static uint32_t attrSize = sizeof( b3VoxelAttrs );
 // Force Zen 1 and Zen 2 to use the fast fallback math path
 #define USE_NATIVE_BMI2 0
 #elif defined( __BMI2__ ) || defined( __AVX2__ )
-	// GCC, Clang, and ICX automatically define __BMI2__ for Haswell+ or Zen3+
+// GCC, Clang, and ICX automatically define __BMI2__ for Haswell+ or Zen3+
 #define USE_NATIVE_BMI2 1
 #include <immintrin.h>
 #elif defined( _MSC_VER ) && ( defined( _M_X64 ) || defined( _M_AMD64 ) ) && defined( __AVX2__ )
-	// MSVC project-wide flag check (/arch:AVX2 or /arch:AVX512)
+// MSVC project-wide flag check (/arch:AVX2 or /arch:AVX512)
 #define USE_NATIVE_BMI2 1
 #include <intrin.h>
 #else
@@ -427,7 +427,7 @@ b3MassData b3ComputeVoxelMass( const b3Voxels* shape, float baseDensity, b3Surfa
 {
 	// compute the mass properties by iterating through voxels, computing the properties
 	// per voxel, and then merging those properties into a final result.
-	MassAppenderContext context = { shape, baseDensity, materials, { 0 }, { 0 } };
+	MassAppenderContext context = { shape, baseDensity, materials, { 0 }, 0 };
 	context.voxelMasses = b3Alloc( shape->data->voxelCount * sizeof( b3MassData ) );
 	memset( context.voxelMasses, 0, shape->data->voxelCount * sizeof( b3MassData ) );
 	b3IterateVoxels( shape->data, MassAppender, &context );

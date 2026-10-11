@@ -72,10 +72,14 @@ bool refreshVoxCache( b3VoxelQueryCache* cache, const b3VoxelData* voxels, b3AAB
 	cache->count = 0;
 	if ( cache->capacity < maxVoxels )
 	{
-		cache->vMinX = b3Alloc( maxVoxels * (int)sizeof( float ) );
-		cache->vMinY = b3Alloc( maxVoxels * (int)sizeof( float ) );
-		cache->vMinZ = b3Alloc( maxVoxels * (int)sizeof( float ) );
-		cache->flags = b3Alloc( maxVoxels * (int)sizeof( uint32_t ) );
+		b3Free( cache->vMinX, cache->capacity * sizeof( float ) );
+		b3Free( cache->vMinY, cache->capacity * sizeof( float ) );
+		b3Free( cache->vMinZ, cache->capacity * sizeof( float ) );
+		b3Free( cache->flags, cache->capacity * sizeof( uint32_t ) );
+		cache->vMinX = b3Alloc( maxVoxels * sizeof( float ) );
+		cache->vMinY = b3Alloc( maxVoxels * sizeof( float ) );
+		cache->vMinZ = b3Alloc( maxVoxels * sizeof( float ) );
+		cache->flags = b3Alloc( maxVoxels * sizeof( uint32_t ) );
 		cache->capacity = maxVoxels;
 	}
 

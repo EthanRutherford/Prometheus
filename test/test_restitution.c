@@ -97,7 +97,7 @@ static float MeasureHeadOn( float restitution, float densityB, float* momentumEr
 
 	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.baseMaterial.friction = 0.0f;
 	shapeDef.baseMaterial.restitution = restitution;
 
@@ -111,7 +111,7 @@ static float MeasureHeadOn( float restitution, float densityB, float* momentumEr
 	bodyDef.position = (b3Pos){ 1.0f, 0.0f, 0.0f };
 	bodyDef.linearVelocity = (b3Vec3){ -0.5f * IMPACT_SPEED, 0.0f, 0.0f };
 	b3BodyId idB = b3CreateBody( worldId, &bodyDef );
-	shapeDef.density = densityB;
+	shapeDef.baseMaterial.density = densityB;
 	b3CreateSphereShape( idB, &shapeDef, &sphere );
 
 	float massA = b3Body_GetMass( idA );
@@ -196,7 +196,7 @@ static float MeasureFlatBounce( float restitution, int subStepCount, float* spin
 	b3BodyId boxId = b3CreateBody( worldId, &bodyDef );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.baseMaterial.friction = 0.0f;
 	shapeDef.baseMaterial.restitution = restitution;
 	b3BoxHull box = b3MakeBoxHull( 1.0f, 0.25f, 1.0f );
@@ -421,7 +421,7 @@ static int SpinTest( void )
 		b3BodyId boxId = b3CreateBody( worldId, &bodyDef );
 
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		shapeDef.density = 1.0f;
+		shapeDef.baseMaterial.density = 1.0f;
 		shapeDef.baseMaterial.friction = 0.0f;
 		shapeDef.baseMaterial.restitution = 1.0f;
 		b3BoxHull box = b3MakeBoxHull( 1.0f, 0.25f, 1.0f );
@@ -504,7 +504,7 @@ static int SingleBoxTest( void )
 	MakeGround( worldId, 0.0f );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.baseMaterial.friction = 0.0f;
 	shapeDef.baseMaterial.restitution = 1.0f;
 	b3BoxHull box = b3MakeCubeHull( 0.5f );
@@ -625,7 +625,7 @@ static int RestingTest( void )
 	b3BodyId boxIds[10];
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.baseMaterial.friction = 0.6f;
 	shapeDef.baseMaterial.restitution = 0.9f;
 	b3BoxHull box = b3MakeCubeHull( 0.5f );
@@ -1146,7 +1146,7 @@ static float MeasurePeakEnergy( const EnergyScene* scene )
 	b3CreateHullShape( groundId, &groundShape, &ground.base );
 
 	b3ShapeDef shapeDef = b3DefaultShapeDef();
-	shapeDef.density = 1.0f;
+	shapeDef.baseMaterial.density = 1.0f;
 	shapeDef.baseMaterial.friction = scene->friction;
 	shapeDef.baseMaterial.restitution = 1.0f;
 	b3BoxHull box = b3MakeBoxHull( scene->halfWidth, scene->halfHeight, scene->halfWidth );

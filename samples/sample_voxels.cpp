@@ -459,7 +459,6 @@ public:
 		bodyDef.rotation = b3Quat_identity;
 		b3BodyId voxelBody1 = b3CreateBody( m_worldId, &bodyDef );
 		b3CreateVoxelShape( voxelBody1, &shapeDef, m_voxelsFlat, 0.1f );
-		b3Vec3 center = b3MulSV( 0.1f, b3AABB_Center( m_voxelsFlat->bounds ) );
 
 		bodyDef.type = b3BodyType::b3_dynamicBody;
 		bodyDef.position = { -10.0f, 3.0f, 0.0f };
@@ -539,7 +538,6 @@ public:
 		bodyDef.rotation = b3Quat_identity;
 		b3BodyId voxelBody1 = b3CreateBody( m_worldId, &bodyDef );
 		b3CreateVoxelShape( voxelBody1, &shapeDef, m_voxelsFlat, 0.1f );
-		b3Vec3 center = b3MulSV( 0.1f, b3AABB_Center( m_voxelsFlat->bounds ) );
 
 		bodyDef.type = b3BodyType::b3_dynamicBody;
 		bodyDef.position = { -10.0f, 3.0f, 0.0f };
@@ -619,7 +617,6 @@ public:
 		bodyDef.rotation = b3Quat_identity;
 		b3BodyId voxelBody1 = b3CreateBody( m_worldId, &bodyDef );
 		b3CreateVoxelShape( voxelBody1, &shapeDef, m_voxelsFlat, 0.1f );
-		b3Vec3 center = b3MulSV( 0.1f, b3AABB_Center( m_voxelsFlat->bounds ) );
 
 		bodyDef.type = b3BodyType::b3_dynamicBody;
 		bodyDef.position = { -10.0f, 3.0f, 0.0f };
@@ -688,13 +685,13 @@ public:
 		}
 
 		AddGroundBox( 20.0f );
+		m_voxels = createVoxelBox( 1.0f, 1.0f, 1.0f );
 
 		b3BodyDef bodyDef = b3DefaultBodyDef();
 		bodyDef.type = b3BodyType::b3_dynamicBody;
-		bodyDef.position = { 2.0f, 2.5f, 0.0f };
+		bodyDef.position = b3ToPos( b3Sub( { 0.0f, 2.5f, 0.0f }, getVoxelCentroid( m_voxels, 1.0f ) ) );
 		b3BodyId voxelBodyB = b3CreateBody( m_worldId, &bodyDef );
 		b3ShapeDef shapeDef = b3DefaultShapeDef();
-		m_voxels = createVoxelBox( 1.0f, 1.0f, 1.0f );
 
 		b3CreateVoxelShape( voxelBodyB, &shapeDef, m_voxels, 1.0f );
 	}
