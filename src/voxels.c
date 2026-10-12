@@ -338,7 +338,7 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 
 			// compute the height of the common ancestor between this voxel and the next voxel. if the height is greater than
 			// zero, we jump back up the tree to the common ancestor and continue from there.
-			height = ++i < def->voxelCount ? msb_64( code ^ def->voxels[i].encoded ) / 6 : treeHeight + 1;
+			height = ++i < def->voxelCount ? (uint32_t) msb_64( code ^ def->voxels[i].encoded ) / 6 : treeHeight + 1;
 		}
 	}
 
@@ -427,7 +427,10 @@ b3MassData b3ComputeVoxelMass( const b3Voxels* shape, float baseDensity, b3Surfa
 {
 	// compute the mass properties by iterating through voxels, computing the properties
 	// per voxel, and then merging those properties into a final result.
-	MassAppenderContext context = { shape, baseDensity, materials, { 0 }, 0 };
+	MassAppenderContext context = { 0 };
+	context.shape = shape;
+	context.baseDensity = baseDensity;
+	context.materials = materials;
 	context.voxelMasses = b3Alloc( shape->data->voxelCount * sizeof( b3MassData ) );
 	memset( context.voxelMasses, 0, shape->data->voxelCount * sizeof( b3MassData ) );
 	b3IterateVoxels( shape->data, MassAppender, &context );
@@ -478,10 +481,10 @@ static float rayBoxIntersect( b3Vec3 origin, b3Vec3 invDir, b3AABB bounds )
 	b3Vec3 tminDir = b3Min( t1, t2 );
 	b3Vec3 tmaxDir = b3Max( t1, t2 );
 
-	float tmin = max( tminDir.x, max( tminDir.y, tminDir.z ) );
-	float tmax = min( tmaxDir.x, min( tmaxDir.y, tmaxDir.z ) );
+	float tmin = b3MaxFloat( tminDir.x, b3MaxFloat( tminDir.y, tminDir.z ) );
+	float tmax = b3MinFloat( tmaxDir.x, b3MinFloat( tmaxDir.y, tmaxDir.z ) );
 
-	return ( tmax >= 0 && tmax >= tmin ) ? max( tmin, 0.0f ) : INFINITY;
+	return ( tmax >= 0 && tmax >= tmin ) ? b3MaxFloat( tmin, 0.0f ) : INFINITY;
 }
 
 static float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3Vec3 origin, b3Vec3 dir, float t )
@@ -504,7 +507,7 @@ static float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3V
 	memset( nodeStack, 0, sizeof( nodeStack ) );
 	nodeStack[shape->treeHeight] = (b3VoxelNode*)( (uint8_t*)shape + shape->nodeOffset );
 
-	float dist = 0.0;
+	float dist = 0.0f;
 	int height = shape->treeHeight;
 	for ( int i = 0; i < 256; i++ )
 	{
@@ -526,7 +529,7 @@ static float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3V
 			b3VoxelAttrs* attrs = (b3VoxelAttrs*)( (uint8_t*)shape + shape->voxelOffset + voxelOffset );
 
 			// set final hit properties
-			float tmax = min( min( sideDist.x, sideDist.y ), sideDist.z );
+			float tmax = b3MinFloat( b3MinFloat( sideDist.x, sideDist.y ), sideDist.z );
 			output->point = b3Select( flipMask, b3Sub( treeScale, pos ), pos );
 			b3Vec3i sideMask = { tmax >= sideDist.x, tmax >= sideDist.y, tmax >= sideDist.z };
 			output->normal = b3Select( sideMask, b3Neg( b3Sign( dir ) ), b3Vec3_zero );
@@ -546,7 +549,7 @@ static float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3V
 		int scale = 1 << offset;
 		b3Vec3i cellMin = b3And( b3ToVec3i( pos ), b3Vec3iOf( 0xFFFFFFFF << offset ) );
 		sideDist = b3Mul( b3Sub( b3FromVec3i( cellMin ), origin ), invDir );
-		dist = min( min( sideDist.x, sideDist.y ), sideDist.z );
+		dist = b3MinFloat( b3MinFloat( sideDist.x, sideDist.y ), sideDist.z );
 
 		b3Vec3i sideMask = { sideDist.x != dist, sideDist.y != dist, sideDist.z != dist };
 		b3Vec3 neighborMax = b3FromVec3i( b3Addi( cellMin, b3MulSVi( scale, sideMask ) ) );
@@ -561,7 +564,7 @@ static float rayMarchVoxels( b3CastOutput* output, const b3VoxelData* shape, b3V
 		b3Vec3i diffPos = b3Xor( b3ToVec3i( pos ), cellMin );
 		int diffHeight = msb_32( diffPos.x | diffPos.y | diffPos.z ) / 2;
 
-		height = max( height, diffHeight );
+		height = b3MaxInt( height, diffHeight );
 	}
 
 	return -1.0f;
@@ -735,10 +738,10 @@ static inline uint64_t filterOccupancy( uint64_t occupancy, ui3 node, ui3 lower,
 	ui3 nodeMax = { nodeMin.x + 3, nodeMin.y + 3, nodeMin.z + 3 };
 	ui3 localLower = { lower.x >> ( height * 2 ), lower.y >> ( height * 2 ), lower.z >> ( height * 2 ) };
 	ui3 localUpper = { upper.x >> ( height * 2 ), upper.y >> ( height * 2 ), upper.z >> ( height * 2 ) };
-	ui3 localMin = { max( nodeMin.x, localLower.x ) & 0x3, max( nodeMin.y, localLower.y ) & 0x3,
-					 max( nodeMin.z, localLower.z ) & 0x3 };
-	ui3 localMax = { min( nodeMax.x, localUpper.x ) & 0x3, min( nodeMax.y, localUpper.y ) & 0x3,
-					 min( nodeMax.z, localUpper.z ) & 0x3 };
+	ui3 localMin = { b3MaxInt( nodeMin.x, localLower.x ) & 0x3, b3MaxInt( nodeMin.y, localLower.y ) & 0x3,
+					 b3MaxInt( nodeMin.z, localLower.z ) & 0x3 };
+	ui3 localMax = { b3MinInt( nodeMax.x, localUpper.x ) & 0x3, b3MinInt( nodeMax.y, localUpper.y ) & 0x3,
+					 b3MinInt( nodeMax.z, localUpper.z ) & 0x3 };
 
 	// index the LUTs by the local min and max values to get the occupancy masks for each axis
 	uint64_t xMask = LUT_X[localMin.x][localMax.x];

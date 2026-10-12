@@ -152,12 +152,12 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 		// single point, which is a conservative check that may miss some voxels that could be skipped.
 		// However, this can prevent computing the closest point calculation below.
 		uint32_t neighborMask = 0;
-		neighborMask |= max( center1.x, center2.x ) < voxMin.x ? b3_negXNeighbor : 0;
-		neighborMask |= min( center1.x, center2.x ) >= voxMax.x ? b3_posXNeighbor : 0;
-		neighborMask |= max( center1.y, center2.y ) < voxMin.y ? b3_negYNeighbor : 0;
-		neighborMask |= min( center1.y, center2.y ) >= voxMax.y ? b3_posYNeighbor : 0;
-		neighborMask |= max( center1.z, center2.z ) < voxMin.z ? b3_negZNeighbor : 0;
-		neighborMask |= min( center1.z, center2.z ) >= voxMax.z ? b3_posZNeighbor : 0;
+		neighborMask |= b3MaxFloat( center1.x, center2.x ) < voxMin.x ? b3_negXNeighbor : 0;
+		neighborMask |= b3MinFloat( center1.x, center2.x ) >= voxMax.x ? b3_posXNeighbor : 0;
+		neighborMask |= b3MaxFloat( center1.y, center2.y ) < voxMin.y ? b3_negYNeighbor : 0;
+		neighborMask |= b3MinFloat( center1.y, center2.y ) >= voxMax.y ? b3_posYNeighbor : 0;
+		neighborMask |= b3MaxFloat( center1.z, center2.z ) < voxMin.z ? b3_negZNeighbor : 0;
+		neighborMask |= b3MinFloat( center1.z, center2.z ) >= voxMax.z ? b3_posZNeighbor : 0;
 		if ( ( flags & neighborMask ) != 0 )
 			continue;
 
@@ -224,12 +224,12 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 				if ( vA1 < minA )
 				{
 					float tn = ( minA - vA1 ) / dA;
-					t1 = max( t1, tn );
+					t1 = b3MaxFloat( t1, tn );
 				}
 				else if ( vA1 > maxA )
 				{
 					float tn = ( vA1 - maxA ) / dA;
-					t1 = max( t1, tn );
+					t1 = b3MaxFloat( t1, tn );
 				}
 
 				float minB = FLT( voxMin, altAxisB );
@@ -240,12 +240,12 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 				if ( vB1 < minB )
 				{
 					float tn = ( minB - vB1 ) / dB;
-					t1 = max( t1, tn );
+					t1 = b3MaxFloat( t1, tn );
 				}
 				else if ( vB1 > maxB )
 				{
 					float tn = ( vB1 - maxB ) / dB;
-					t1 = max( t1, tn );
+					t1 = b3MaxFloat( t1, tn );
 				}
 
 				b3Vec3 cp1 = b3Add( center1, b3MulSV( t1, dir ) );
@@ -289,12 +289,12 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 				if ( vA2 < minA )
 				{
 					float tn = 1.0f - ( minA - vA2 ) / dA;
-					t2 = min( t2, tn );
+					t2 = b3MinFloat( t2, tn );
 				}
 				else if ( vA2 > maxA )
 				{
 					float tn = 1.0f - ( vA2 - maxA ) / dA;
-					t2 = min( t2, tn );
+					t2 = b3MinFloat( t2, tn );
 				}
 
 				float minB = FLT( voxMin, altAxisB );
@@ -305,12 +305,12 @@ static void collideVoxCapsule( VoxCollideContext* context, b3Transform bToA, b3A
 				if ( vB2 < minB )
 				{
 					float tn = 1.0f - ( minB - vB2 ) / dB;
-					t2 = min( t2, tn );
+					t2 = b3MinFloat( t2, tn );
 				}
 				else if ( vB2 > maxB )
 				{
 					float tn = 1.0f - ( vB2 - maxB ) / dB;
-					t2 = min( t2, tn );
+					t2 = b3MinFloat( t2, tn );
 				}
 
 				// if t1 and t2 are effectively the same, don't add a second contact point
@@ -642,7 +642,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 				continue;
 
 			// check for near parallel edges (we don't need to scale the tolerance, since voxel edges are length 1)
-			float maxCD = max( fabsf( CBA ), fabsf( DBA ) );
+			float maxCD = b3MaxFloat( fabsf( CBA ), fabsf( DBA ) );
 			if ( maxCD <= B3_PARALLEL_EDGE_TOL )
 				continue;
 
@@ -1065,7 +1065,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 				cp->point = b3MulSV( voxelsA.scale, pt );
 				cp->normal = bestNormalA;
 				cp->separation = sep * voxelsA.scale;
-				clipSep = min( clipSep, cp->separation );
+				clipSep = b3MinFloat( clipSep, cp->separation );
 			}
 		}
 		else
@@ -1198,7 +1198,7 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 				cp->point = pt;
 				cp->normal = b3Neg( normal );
 				cp->separation = sep;
-				clipSep = min( clipSep, cp->separation );
+				clipSep = b3MinFloat( clipSep, cp->separation );
 			}
 		}
 

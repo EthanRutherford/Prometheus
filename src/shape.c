@@ -701,6 +701,7 @@ b3AABB b3ComputeSweptShapeAABB( const b3Shape* shape, const b3Sweep* sweep, floa
 		case b3_voxelShape:
 			// TODO: figure this out.
 			printf( "called b3ComputeSweptShapeAABB for voxel shape, returning empty AABB\n" );
+			return (b3AABB){ xf1.p, xf1.p };
 
 		default:
 			B3_ASSERT( false );
@@ -761,6 +762,7 @@ float b3GetShapeArea( const b3Shape* shape )
 		case b3_voxelShape:
 			// TODO: determine if I need to implement this, and how
 			printf( "called b3GetShapeArea for voxel shape, returning 0.0f\n" );
+			return 0.0f;
 
 		default:
 			return 0.0f;
@@ -791,6 +793,7 @@ float b3GetShapeProjectedArea( const b3Shape* shape, b3Vec3 planeNormal )
 		case b3_voxelShape:
 			// TODO: determine if I need to implement this, and how
 			printf( "called b3GetShapeProjectedArea for voxel shape, returning 0.0f\n" );
+			return 0.0f;
 
 		default:
 			return 0.0f;
@@ -874,6 +877,7 @@ b3ShapeExtent b3ComputeShapeExtent( const b3Shape* shape, b3Vec3 localCenter )
 		break;
 
 		case b3_voxelShape:
+		{
 			b3AABB aabb = shape->voxels.data->bounds;
 			b3Vec3 d1 = b3Sub( localCenter, aabb.lowerBound );
 			b3Vec3 d2 = b3Sub( aabb.upperBound, localCenter );
@@ -882,7 +886,8 @@ b3ShapeExtent b3ComputeShapeExtent( const b3Shape* shape, b3Vec3 localCenter )
 			extent.minExtent = b3MaxFloat( face, halfWidth );
 			b3Vec3 p = b3FarthestPointOnAABB( aabb, localCenter );
 			extent.maxExtent = b3Abs( p );
-			break;
+		}
+		break;
 
 		default:
 			break;
@@ -1101,8 +1106,8 @@ void b3CreateShapeProxy( b3World* world, b3Shape* shape, b3BodyType type, b3Worl
 	b3UpdateShapeAABBs( shape, fatAABB, transform, type );
 
 	// Create proxies in the broad-phase.
-	shape->proxyKey = b3BroadPhase_CreateProxy( &world->broadPhase, type, *fatAABB, shape->filter.categoryBits, shape->id,
-												forcePairCreation );
+	shape->proxyKey =
+		b3BroadPhase_CreateProxy( &world->broadPhase, type, *fatAABB, shape->filter.categoryBits, shape->id, forcePairCreation );
 	B3_ASSERT( B3_PROXY_TYPE( shape->proxyKey ) < b3_bodyTypeCount );
 }
 
@@ -2210,6 +2215,7 @@ void b3Shape_ApplyWind( b3ShapeId shapeId, b3Vec3 wind, float drag, float lift, 
 		case b3_voxelShape:
 			// TODO: determine if I need to implement this, and how
 			printf( "b3Shape_ApplyWind: voxel shape not supported yet\n" );
+			break;
 
 		default:
 			break;

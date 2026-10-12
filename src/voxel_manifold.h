@@ -40,7 +40,7 @@ typedef struct VoxCollideContext
 
 // Clip the query bounds to the voxel grid bounds, matching the behavior of b3QueryVoxels.
 // This stabilizes the voxel contact cache when the query bounds shift by less than a voxel size.
-inline b3AABB computeVoxelBounds( const b3VoxelData* voxels, b3Vec3 lower, b3Vec3 upper )
+static inline b3AABB computeVoxelBounds( const b3VoxelData* voxels, b3Vec3 lower, b3Vec3 upper )
 {
 	b3Vec3 lowerBound = b3Max( b3Floor( lower ), voxels->bounds.lowerBound );
 	b3Vec3 upperBound = b3Min( b3Ceil( upper ), voxels->bounds.upperBound );
