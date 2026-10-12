@@ -2398,6 +2398,11 @@ static bool b3CompoundTimeOfImpactFcn( const b3CompoundData* compound, int child
 static b3TOIOutput b3VoxelTimeOfImpact( b3Shape* shapeA, b3Shape* shapeB, b3Sweep* sweepA, b3Sweep* sweepB, float maxFraction )
 {
 	// TODO: implement b3VoxelTimeOfImpact
+	B3_UNUSED( shapeA );
+	B3_UNUSED( shapeB );
+	B3_UNUSED( sweepA );
+	B3_UNUSED( sweepB );
+	B3_UNUSED( maxFraction );
 	b3TOIOutput output = { 0 };
 	return output;
 }

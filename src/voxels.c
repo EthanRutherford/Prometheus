@@ -464,6 +464,9 @@ b3AABB b3ComputeVoxelAABB( const b3Voxels* shape, b3Transform transform )
 bool b3OverlapVoxels( const b3Voxels* shape, b3Transform shapeTransform, const b3ShapeProxy* proxy )
 {
 	// TODO: implement
+	B3_UNUSED( shape );
+	B3_UNUSED( shapeTransform );
+	B3_UNUSED( proxy );
 	b3Log( "b3OverlapVoxels: not implemented\n" );
 	return false;
 }
@@ -625,17 +628,22 @@ b3CastOutput b3RayCastVoxels( const b3Voxels* shape, const b3RayCastInput* input
 
 b3CastOutput b3ShapeCastVoxels( const b3Voxels* shape, const b3ShapeCastInput* input )
 {
-	b3CastOutput output = { 0 };
-
 	// TODO: implement
+	B3_UNUSED( shape );
+	B3_UNUSED( input );
 	b3Log( "b3ShapeCastVoxels: not implemented\n" );
 
+	b3CastOutput output = { 0 };
 	return output;
 }
 
 int b3CollideMoverAndVoxels( b3PlaneResult* results, int capacity, const b3Voxels* shape, const b3Capsule* mover )
 {
 	// TODO: implement
+	B3_UNUSED( results );
+	B3_UNUSED( capacity );
+	B3_UNUSED( shape );
+	B3_UNUSED( mover );
 	b3Log( "b3CollideMoverAndVoxels: not implemented\n" );
 	return 0;
 }
@@ -695,7 +703,7 @@ typedef struct ui3
 	uint32_t x, y, z;
 } ui3;
 
-uint64_t filterOccupancy( uint64_t occupancy, ui3 node, ui3 lower, ui3 upper, int height )
+static inline uint64_t filterOccupancy( uint64_t occupancy, ui3 node, ui3 lower, ui3 upper, int height )
 {
 	// LUTS for filtering occupancy bits based on the min and max bounds of the query AABB.
 	// The values in the LUTs represent all bits that are valid for the given min and max of that axis.

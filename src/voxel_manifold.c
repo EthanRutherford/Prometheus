@@ -1242,6 +1242,9 @@ static void collideVoxHull( VoxCollideContext* context, b3Transform bToA, b3Aren
 
 static void collideVoxVox( VoxCollideContext* context, b3Transform bToA, b3Arena arena )
 {
+	B3_UNUSED( context );
+	B3_UNUSED( bToA );
+	B3_UNUSED( arena );
 	b3Log( "collideVoxVox not implemented\n" );
 }
 
