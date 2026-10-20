@@ -234,6 +234,7 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 
 	b3VoxelBitmap bitmap = b3CreateVoxelBitmap( (b3AABB){ b3Vec3Of( 0 ), b3Vec3Of( (float)( 4 << ( treeHeight * 2 ) ) ) } );
 	uint64_t lastCode = def->voxels[0].encoded;
+	b3SetVoxelInBitmap( &bitmap, b3DecodeVoxelX( lastCode ), b3DecodeVoxelY( lastCode ), b3DecodeVoxelZ( lastCode ) );
 	for ( int i = 1; i < def->voxelCount; i++ )
 	{
 		uint64_t code = def->voxels[i].encoded;
@@ -338,7 +339,7 @@ b3VoxelData* b3CreateVoxels( const b3VoxelsDef* def )
 
 			// compute the height of the common ancestor between this voxel and the next voxel. if the height is greater than
 			// zero, we jump back up the tree to the common ancestor and continue from there.
-			height = ++i < def->voxelCount ? (uint32_t) msb_64( code ^ def->voxels[i].encoded ) / 6 : treeHeight + 1;
+			height = ++i < def->voxelCount ? (uint32_t)msb_64( code ^ def->voxels[i].encoded ) / 6 : treeHeight + 1;
 		}
 	}
 
