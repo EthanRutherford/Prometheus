@@ -189,11 +189,25 @@ void b3StrCpy( char* dst, int size, const char* src );
 uint64_t b3Hash64NonZero( const uint8_t* bytes, int n );
 
 // helpers for bit casting between int and float
+// these inline union assignments will be compiled down to pure register moves,
+// so there is no type punning or strict aliasing issues, and no additional overhead.
 static inline float b3IntToFloat( int x )
 {
-	return *(float*)&x;
+	union
+	{
+		int i;
+		float f;
+	} u;
+	u.i = x;
+	return u.f;
 }
 static inline int b3FloatToInt( float x )
 {
-	return *(int*)&x;
+	union
+	{
+		int i;
+		float f;
+	} u;
+	u.f = x;
+	return u.i;
 }
