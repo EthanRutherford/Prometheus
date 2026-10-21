@@ -1,3 +1,5 @@
+#pragma once
+
 #include <stdint.h>
 
 #if defined( __GNUC__ ) || defined( __clang__ )
