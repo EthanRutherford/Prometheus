@@ -51,8 +51,8 @@ static uint32_t attrSize = sizeof( b3VoxelAttrs );
 // The ordering resembles a morton code, but rather than interleaving them zyxzyx, they're interleaved zzyyxx, which
 // orders the children of a node in a more traditional x + 4y + 16z order. This is not only easier to reason about for the
 // average dev, but also allows for some useful bit shifting and masking operations when processing voxels en masse.
-#define B3_VOXEL_X_MASK 0x30C30C30C30C30C3ULL
-#define B3_VOXEL_Y_MASK 0xC30C30C30C30C30CULL
+#define B3_VOXEL_X_MASK 0x00C30C30C30C30C3ULL
+#define B3_VOXEL_Y_MASK 0x030C30C30C30C30CULL
 #define B3_VOXEL_Z_MASK 0x0C30C30C30C30C30ULL
 
 uint64_t b3EncodeVoxel( uint32_t x, uint32_t y, uint32_t z )
@@ -74,25 +74,23 @@ uint32_t b3DecodeVoxelZ( uint64_t code )
 #else
 static inline uint64_t depositPairs( uint64_t v )
 {
-	v &= 0x00000000001FFFFFULL;
+	v &= 0x00000000000FFFFFULL;
 
-	v = ( v | ( v << 32 ) ) & 0x0000001F0000FFFFULL;
-	v = ( v | ( v << 16 ) ) & 0x001F0000FF0000FFULL;
-	v = ( v | ( v << 8 ) ) & 0x010F000F000F000FULL;
-	v = ( v | ( v << 4 ) ) & 0x10C30C30C30C30C3ULL;
-	v = ( v | ( v << 2 ) ) & 0x30C30C30C30C30C3ULL;
+	v = ( v | ( v << 32 ) ) & 0x000F00000000FFFFULL;
+	v = ( v | ( v << 16 ) ) & 0x000F0000FF0000FFULL;
+	v = ( v | ( v << 8 ) ) & 0x000F00F00F00F00FULL;
+	v = ( v | ( v << 4 ) ) & 0x00C30C30C30C30C3ULL;
 
 	return v;
 }
 static inline uint32_t extractPairs( uint64_t v )
 {
-	v &= 0x30C30C30C30C30C3ULL;
+	v &= 0x00C30C30C30C30C3ULL;
 
-	v = ( v | ( v >> 2 ) ) & 0x10C30C30C30C30C3ULL;
-	v = ( v | ( v >> 4 ) ) & 0x010F000F000F000FULL;
-	v = ( v | ( v >> 8 ) ) & 0x001F0000FF0000FFULL;
-	v = ( v | ( v >> 16 ) ) & 0x0000001F0000FFFFULL;
-	v = ( v | ( v >> 32 ) ) & 0x00000000001FFFFFULL;
+	v = ( v | ( v >> 4 ) ) & 0x000F00F00F00F00FULL;
+	v = ( v | ( v >> 8 ) ) & 0x000F0000FF0000FFULL;
+	v = ( v | ( v >> 16 ) ) & 0x000F00000000FFFFULL;
+	v = ( v | ( v >> 32 ) ) & 0x00000000000FFFFFULL;
 
 	return (uint32_t)v;
 }

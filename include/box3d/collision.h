@@ -478,16 +478,16 @@ B3_API const b3CompoundData* b3ValidateCompound( const uint8_t* bytes, int byteC
  * @{
  */
 
-/// Encode a voxel coordinate into a 64-bit integer. The x, y, and z coordinates must be in the range [0, 2^21).
+/// Encode a voxel coordinate into a 64-bit integer. The x, y, and z coordinates must be in the range [0, 2^20).
 B3_API uint64_t b3EncodeVoxel( uint32_t x, uint32_t y, uint32_t z );
 
-/// Decode a voxel x coordinate from a 64-bit integer. The x, y, and z coordinates are in the range [0, 2^21).
+/// Decode a voxel x coordinate from a 64-bit integer. The result is in the range [0, 2^20).
 B3_API uint32_t b3DecodeVoxelX( uint64_t code );
 
-/// Decode a voxel y coordinate from a 64-bit integer. The x, y, and z coordinates are in the range [0, 2^21).
+/// Decode a voxel y coordinate from a 64-bit integer. The result is in the range [0, 2^20).
 B3_API uint32_t b3DecodeVoxelY( uint64_t code );
 
-/// Decode a voxel z coordinate from a 64-bit integer. The x, y, and z coordinates are in the range [0, 2^21).
+/// Decode a voxel z coordinate from a 64-bit integer. The result is in the range [0, 2^20).
 B3_API uint32_t b3DecodeVoxelZ( uint64_t code );
 
 /// Create a generic voxel shape.
